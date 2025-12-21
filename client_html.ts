@@ -206,6 +206,10 @@ export const CLIENT_HTML = `<!DOCTYPE html>
         this.lastPingSentAt = 0;
         this.pingIntervalMs = 2000;
         this.pingTimerId = null;
+        this.playerName = null;
+        this.connectAttempts = 0;
+        this.maxConnectAttempts = 5;
+        this.baseReconnectDelayMs = 1000;
       }
       sendRename(name) { if (this.ws?.readyState === 1) this.ws.send(JSON.stringify({ t: "rename", name })); }
       status(text, color) {
@@ -215,6 +219,29 @@ export const CLIENT_HTML = `<!DOCTYPE html>
       wsUrl() {
         const proto = location.protocol === "https:" ? "wss" : "ws";
         return proto + "://" + location.host + "/ws";
+      }
+      scheduleReconnect() {
+        if (this.connectAttempts >= this.maxConnectAttempts) {
+          this.status("🔴 多次重连失败，正在刷新页面...", "#FF5555");
+          setTimeout(() => {
+            try {
+              location.reload();
+            } catch {
+              // ignore
+            }
+          }, 1500);
+          return;
+        }
+        this.connectAttempts++;
+        const delay = Math.min(
+          this.baseReconnectDelayMs * Math.pow(2, this.connectAttempts - 1),
+          30000,
+        );
+        const secs = Math.round(delay / 100) / 10;
+        this.status("🟡 连接断开，第 " + this.connectAttempts + " 次重连，" + secs + " 秒后重试...", "#FFFF55");
+        setTimeout(() => {
+          this.connect(this.playerName || "Player");
+        }, delay);
       }
       startPingLoop() {
         if (this.pingTimerId) return;
@@ -234,23 +261,25 @@ export const CLIENT_HTML = `<!DOCTYPE html>
         tick();
       }
       connect(playerName) {
+        if (playerName) this.playerName = playerName;
         this.status("🟡 连接中...", "#FFFF55");
         const ws = new WebSocket(this.wsUrl());
         this.ws = ws;
 
         ws.onopen = () => {
           this.connected = true;
+          this.connectAttempts = 0;
           this.status("🟢 已连接", "#55FF55");
-          ws.send(JSON.stringify({ t: "hello", name: playerName }));
+          ws.send(JSON.stringify({ t: "hello", name: this.playerName || playerName }));
           this.startPingLoop();
         };
         ws.onclose = () => {
           this.connected = false;
-          this.status("🔴 连接断开", "#FF5555");
           if (this.pingTimerId) {
             clearTimeout(this.pingTimerId);
             this.pingTimerId = null;
           }
+          this.scheduleReconnect();
         };
         ws.onmessage = (ev) => {
           let msg; try { msg = JSON.parse(ev.data); } catch { return; }
@@ -353,13 +382,17 @@ export const CLIENT_HTML = `<!DOCTYPE html>
 	        if (!ev) return;
 	        switch (ev.t) {
 	          case "join":
-            if (ev.player.id === localPlayerId) { if(!localPlayer) createLocalPlayer(ev.player); }
-            else {
-               if(!playersById.has(ev.player.id)) {
-                 const rp = new PlayerModel(scene, ev.player.id, ev.player.pos, ev.player.name, true);
-                 players.push(rp); playersById.set(ev.player.id, rp);
-               }
-            }
+	            // 在收到 welcome 之前忽略 join 事件，避免把自己当作远程玩家创建一次
+	            if (!localPlayerId) break;
+	            if (ev.player.id === localPlayerId) {
+	              if (!localPlayer) createLocalPlayer(ev.player);
+	            } else {
+	              if (!playersById.has(ev.player.id)) {
+	                const rp = new PlayerModel(scene, ev.player.id, ev.player.pos, ev.player.name, true);
+	                players.push(rp);
+	                playersById.set(ev.player.id, rp);
+	              }
+	            }
 	            break;
 	          case "leave": removePlayer(ev.playerId); break;
 	          case "chat":

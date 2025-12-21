@@ -24,6 +24,13 @@ Deno.serve({ port: PORT }, async (req) => {
   }
 
   if (url.pathname === "/ws") {
+    // 如果是普通 GET 请求 /ws（例如被 anti-bot 或爬虫直接访问），重定向回首页
+    const upgrade = req.headers.get("upgrade") || req.headers.get("Upgrade");
+    if (!upgrade || upgrade.toLowerCase() !== "websocket") {
+      const redirectUrl = new URL("/", req.url);
+      return Response.redirect(redirectUrl, 302);
+    }
+    // 正常的 WebSocket 握手（带 Upgrade: websocket）才交给 WS 处理
     return await handleWs(req);
   }
 
@@ -38,4 +45,3 @@ Deno.serve({ port: PORT }, async (req) => {
 
   return text("Not Found", 404);
 });
-
