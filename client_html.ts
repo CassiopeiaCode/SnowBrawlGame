@@ -119,8 +119,13 @@ export const CLIENT_HTML = `<!DOCTYPE html>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- 使用与 r128 对应的 three@0.128.0 示例加载器（unpkg 提供） -->
+  <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
 	  <script>
+      // 本次服务器启动时注入的简单 WS 加密秘钥（在浏览器看来是硬编码常量）
+      const WS_SECRET = "__WS_SECRET__";
+
 	    // 简单 randomUUID 兼容实现：优先使用原生，其次使用 getRandomValues，最后退回 Math.random
 	    function randomId() {
       const g = (typeof crypto !== "undefined") ? crypto : (typeof window !== "undefined" ? (window.crypto || window.msCrypto) : null);
@@ -214,6 +219,13 @@ export const CLIENT_HTML = `<!DOCTYPE html>
       h = sign * Math.pow(Math.abs(h), 1.8) * 2.5; // 原始约 [-5, 5]
       return h + 6; // 整体抬升，保证最低高度 > 0
     }
+
+    // 计算给定 XZ 下的“地面高度”，仅基于程序化地形。
+    // Kenney 静态模型不再影响玩家的地面高度（玩家不再与它们发生碰撞），
+    // 但仍然用于雪球碰撞。
+    function groundHeightWithObstacles(x, z) {
+      return terrainHeight(x, z);
+    }
     const CONFIG = {
       gravity: 22,
       moveSpeed: 8,       
@@ -236,6 +248,9 @@ export const CLIENT_HTML = `<!DOCTYPE html>
     const playersById = new Map();
     const snowballsById = new Map();
     let snowballs = [];
+
+    // 静态场景碰撞体（Kenney 模型的包围盒），仅在客户端用于简单碰撞
+    const STATIC_OBSTACLES = [];
 
     let networkManager;
     let cameraYaw = 0;
@@ -260,6 +275,24 @@ export const CLIENT_HTML = `<!DOCTYPE html>
       document.getElementById("hp-text").textContent = "❤".repeat(Math.max(0, hearts));
     }
 
+    // 玩家不再与 Kenney 静态障碍物发生碰撞（只保留地形 + 雪球 vs 障碍物碰撞）。
+    function resolvePlayerStaticCollisions(pos) {
+      // no-op：玩家只与地形碰撞，不再与 Kenney 模型发生碰撞。
+      return;
+    }
+
+    // WS 消息直接使用 JSON 明文（编码/解码包装在函数中，方便后续演进）
+    function wsEncode(obj) {
+      return JSON.stringify(obj);
+    }
+    function wsDecode(str) {
+      try {
+        return JSON.parse(str);
+      } catch {
+        return null;
+      }
+    }
+
     class NetworkManager {
       constructor() {
         this.ws = null;
@@ -275,7 +308,9 @@ export const CLIENT_HTML = `<!DOCTYPE html>
         this.maxConnectAttempts = 5;
         this.baseReconnectDelayMs = 1000;
       }
-      sendRename(name) { if (this.ws?.readyState === 1) this.ws.send(JSON.stringify({ t: "rename", name })); }
+      sendRename(name) {
+        if (this.ws?.readyState === 1) this.ws.send(wsEncode({ t: "rename", name }));
+      }
       status(text, color) {
         const el = document.getElementById("net-status");
         el.textContent = text; if(color) el.style.color = color;
@@ -316,7 +351,7 @@ export const CLIENT_HTML = `<!DOCTYPE html>
           }
           this.lastPingSentAt = performance.now();
           try {
-            this.ws.send(JSON.stringify({ t: "ping", now: Date.now() }));
+            this.ws.send(wsEncode({ t: "ping", now: Date.now() }));
           } catch {
             // ignore
           }
@@ -334,7 +369,7 @@ export const CLIENT_HTML = `<!DOCTYPE html>
           this.connected = true;
           this.connectAttempts = 0;
           this.status("🟢 已连接", "#55FF55");
-          ws.send(JSON.stringify({ t: "hello", name: this.playerName || playerName }));
+          ws.send(wsEncode({ t: "hello", name: this.playerName || playerName }));
           this.startPingLoop();
         };
         ws.onclose = () => {
@@ -346,8 +381,8 @@ export const CLIENT_HTML = `<!DOCTYPE html>
           this.scheduleReconnect();
         };
         ws.onmessage = (ev) => {
-	          let msg; try { msg = JSON.parse(ev.data); } catch { return; }
-	
+	          let msg; try { msg = wsDecode(ev.data); } catch { return; }
+	  
 	          if (msg.t === "welcome") {
             // 新连接 / 重连：如果已有本地玩家且 id 不同，清理旧的本地玩家
             if (localPlayer && localPlayer.id !== msg.id) {
@@ -396,14 +431,14 @@ export const CLIENT_HTML = `<!DOCTYPE html>
         };
 
       }
-      sendChat(text) { if (this.ws?.readyState === 1) this.ws.send(JSON.stringify({ t: "chat", text })); }
+      sendChat(text) { if (this.ws?.readyState === 1) this.ws.send(wsEncode({ t: "chat", text })); }
       maybeSendLocalState() {
         if (this.ws?.readyState !== 1 || !localPlayer) return;
         const now = performance.now();
         if (now - this.lastStateSend < (1000 / CONFIG.netSendHz)) return;
         this.lastStateSend = now;
         const { mesh, velocity } = localPlayer;
-        this.ws.send(JSON.stringify({
+        this.ws.send(wsEncode({
           t: "state",
           pos: { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z },
           rotY: mesh.rotation.y,
@@ -414,7 +449,7 @@ export const CLIENT_HTML = `<!DOCTYPE html>
       }
       sendSnowball(shotId, dir) {
         if (this.ws?.readyState === 1) {
-          this.ws.send(JSON.stringify({ t: "snowball", id: shotId, dir, ts: Date.now() }));
+          this.ws.send(wsEncode({ t: "snowball", id: shotId, dir, ts: Date.now() }));
         }
       }
       applySnapshot(list) {
@@ -774,7 +809,7 @@ export const CLIENT_HTML = `<!DOCTYPE html>
 	      update(dt) {
 	        if (this.dead) {
 	             this.mesh.rotation.x = -Math.PI / 2;
-             this.mesh.position.y = terrainHeight(this.mesh.position.x, this.mesh.position.z) + 0.2;
+             this.mesh.position.y = groundHeightWithObstacles(this.mesh.position.x, this.mesh.position.z) + 0.2;
 	             return;
         } else {
              this.mesh.rotation.x = 0; 
@@ -811,9 +846,9 @@ export const CLIENT_HTML = `<!DOCTYPE html>
           this.velocity.x *= friction; this.velocity.z *= friction;
           this.velocity.y -= CONFIG.gravity * dt;
 
-          if (this.input.space && this.onGround) {
-            this.velocity.y = CONFIG.jumpForce;
-            this.onGround = false; this.input.space = false;
+	          if (this.input.space && this.onGround) {
+	            this.velocity.y = CONFIG.jumpForce;
+	            this.onGround = false; this.input.space = false;
           }
           
           // R 嘲讽旋转
@@ -823,17 +858,21 @@ export const CLIENT_HTML = `<!DOCTYPE html>
 	          }
 	
 	          this.mesh.position.add(this.velocity.clone().multiplyScalar(dt));
-	          // 限制玩家不能走出地图
-	          const half = CONFIG.mapHalf;
-	          this.mesh.position.x = THREE.MathUtils.clamp(this.mesh.position.x, -half, half);
-	          this.mesh.position.z = THREE.MathUtils.clamp(this.mesh.position.z, -half, half);
 
-	          const groundY = terrainHeight(this.mesh.position.x, this.mesh.position.z);
-	          if (this.mesh.position.y <= groundY) {
-	            this.mesh.position.y = groundY;
-	            this.velocity.y = 0;
-            this.onGround = true;
-          }
+            // 简单静态场景碰撞：避免玩家穿过 Kenney 模型
+            resolvePlayerStaticCollisions(this.mesh.position);
+
+            // 限制玩家不能走出地图
+            const half = CONFIG.mapHalf;
+            this.mesh.position.x = THREE.MathUtils.clamp(this.mesh.position.x, -half, half);
+            this.mesh.position.z = THREE.MathUtils.clamp(this.mesh.position.z, -half, half);
+
+          const groundY = groundHeightWithObstacles(this.mesh.position.x, this.mesh.position.z);
+            if (this.mesh.position.y <= groundY) {
+              this.mesh.position.y = groundY;
+              this.velocity.y = 0;
+              this.onGround = true;
+            }
 	        }
 
 	        this.updateAnimation(dt);
@@ -954,6 +993,24 @@ export const CLIENT_HTML = `<!DOCTYPE html>
         if (this.mesh.position.y <= groundY) {
           // 视觉上在碰到地形时销毁雪球
           this.destroy();
+          return;
+        }
+
+        // 雪球与静态障碍物碰撞：击中 Kenney 模型时提前销毁
+        if (STATIC_OBSTACLES.length) {
+          const radius = 0.2;
+          const p = this.mesh.position;
+          for (const box of STATIC_OBSTACLES) {
+            if (p.y + radius < box.min.y || p.y - radius > box.max.y) continue;
+            const minX = box.min.x - radius;
+            const maxX = box.max.x + radius;
+            const minZ = box.min.z - radius;
+            const maxZ = box.max.z + radius;
+            if (p.x >= minX && p.x <= maxX && p.z >= minZ && p.z <= maxZ) {
+              this.destroy();
+              break;
+            }
+          }
         }
       }
 
@@ -965,6 +1022,237 @@ export const CLIENT_HTML = `<!DOCTYPE html>
       }
     }
 
+
+      // 使用 Kenney Holiday Kit 的 GLB 模型摆放一些小镇建筑/长椅
+      // 全部 GLB 清单
+      const KENNEY_GLBS = [
+        "bench-short.glb",
+        "bench.glb",
+        "cabin-corner-bottom.glb",
+        "cabin-corner-logs.glb",
+        "cabin-corner.glb",
+        "cabin-door-rotate.glb",
+        "cabin-doorway-center.glb",
+        "cabin-doorway-left.glb",
+        "cabin-doorway-right.glb",
+        "cabin-doorway.glb",
+        "cabin-fence.glb",
+        "cabin-overhang-door-rotate.glb",
+        "cabin-overhang-doorway.glb",
+        "cabin-roof-chimney.glb",
+        "cabin-roof-corner.glb",
+        "cabin-roof-dormer.glb",
+        "cabin-roof-point.glb",
+        "cabin-roof-snow-chimney.glb",
+        "cabin-roof-snow-corner.glb",
+        "cabin-roof-snow-dormer.glb",
+        "cabin-roof-snow-point.glb",
+        "cabin-roof-snow.glb",
+        "cabin-roof-top.glb",
+        "cabin-roof.glb",
+        "cabin-wall-low.glb",
+        "cabin-wall-roof-center.glb",
+        "cabin-wall-roof.glb",
+        "cabin-wall-wreath.glb",
+        "cabin-wall.glb",
+        "cabin-window-a.glb",
+        "cabin-window-b.glb",
+        "cabin-window-c.glb",
+        "cabin-window-large.glb",
+        "candy-cane-green.glb",
+        "candy-cane-red.glb",
+        "festivus-pole.glb",
+        "floor-stone.glb",
+        "floor-wood-snow.glb",
+        "floor-wood.glb",
+        "gingerbread-man.glb",
+        "gingerbread-woman.glb",
+        "hanukkah-dreidel.glb",
+        "hanukkah-menorah-candles.glb",
+        "hanukkah-menorah.glb",
+        "kwanzaa-kikombe.glb",
+        "kwanzaa-kinara-alternative.glb",
+        "kwanzaa-kinara.glb",
+        "lantern-hanging.glb",
+        "lantern.glb",
+        "lights-colored.glb",
+        "lights-green.glb",
+        "lights-red.glb",
+        "nutcracker.glb",
+        "present-a-cube.glb",
+        "present-a-rectangle.glb",
+        "present-a-round.glb",
+        "present-b-cube.glb",
+        "present-b-rectangle.glb",
+        "present-b-round.glb",
+        "reindeer.glb",
+        "rocks-large.glb",
+        "rocks-medium.glb",
+        "rocks-small.glb",
+        "sled-long.glb",
+        "sled.glb",
+        "snow-bunker.glb",
+        "snow-flat-large.glb",
+        "snow-flat.glb",
+        "snow-pile.glb",
+        "snowflake-a.glb",
+        "snowflake-b.glb",
+        "snowflake-c.glb",
+        "snowman-hat.glb",
+        "snowman.glb",
+        "sock-green-cane.glb",
+        "sock-green.glb",
+        "sock-red-cane.glb",
+        "sock-red.glb",
+        "train-locomotive.glb",
+        "train-tender.glb",
+        "train-wagon-flat-short.glb",
+        "train-wagon-flat.glb",
+        "train-wagon-logs.glb",
+        "train-wagon-short.glb",
+        "train-wagon.glb",
+        "trainset-rail-bend.glb",
+        "trainset-rail-corner.glb",
+        "trainset-rail-detailed-bend.glb",
+        "trainset-rail-detailed-corner.glb",
+        "trainset-rail-detailed-straight.glb",
+        "trainset-rail-straight.glb",
+        "tree-decorated-snow.glb",
+        "tree-decorated.glb",
+        "tree-snow-a.glb",
+        "tree-snow-b.glb",
+        "tree-snow-c.glb",
+        "tree.glb",
+        "wreath-decorated.glb",
+        "wreath.glb",
+      ];
+
+      // 仅用于户外随机散布的模型子集：排除 cabin 结构、floor、wall、window、
+      // sock（壁炉袜）、节日桌面道具等更偏室内/建筑细节的资源。
+      const KENNEY_OUTDOOR_GLBS = [
+        "bench-short.glb",
+        "bench.glb",
+        "candy-cane-green.glb",
+        "candy-cane-red.glb",
+        "festivus-pole.glb",
+        "gingerbread-man.glb",
+        "gingerbread-woman.glb",
+        "lantern-hanging.glb",
+        "lantern.glb",
+        "lights-colored.glb",
+        "lights-green.glb",
+        "lights-red.glb",
+        "nutcracker.glb",
+        "present-a-cube.glb",
+        "present-a-rectangle.glb",
+        "present-a-round.glb",
+        "present-b-cube.glb",
+        "present-b-rectangle.glb",
+        "present-b-round.glb",
+        "reindeer.glb",
+        "rocks-large.glb",
+        "rocks-medium.glb",
+        "rocks-small.glb",
+        "sled-long.glb",
+        "sled.glb",
+        "snow-bunker.glb",
+        "snow-flat-large.glb",
+        "snow-flat.glb",
+        "snow-pile.glb",
+        "snowflake-a.glb",
+        "snowflake-b.glb",
+        "snowflake-c.glb",
+        "snowman-hat.glb",
+        "snowman.glb",
+        "train-locomotive.glb",
+        "train-tender.glb",
+        "train-wagon-flat-short.glb",
+        "train-wagon-flat.glb",
+        "train-wagon-logs.glb",
+        "train-wagon-short.glb",
+        "train-wagon.glb",
+        "tree-decorated-snow.glb",
+        "tree-decorated.glb",
+        "tree-snow-a.glb",
+        "tree-snow-b.glb",
+        "tree-snow-c.glb",
+        "tree.glb",
+        "wreath-decorated.glb",
+        "wreath.glb",
+      ];
+
+      function placeKenneyModel(url, pos, rotY, scale) {
+        if (!THREE || !THREE.GLTFLoader) {
+          console.warn("GLTFLoader not available, skip model:", url);
+          return;
+        }
+        const loader = new THREE.GLTFLoader();
+        loader.load(
+          url,
+          function(gltf) {
+            const model = gltf.scene;
+            model.position.set(pos.x, pos.y, pos.z);
+            if (typeof rotY === "number") {
+              model.rotation.y = rotY;
+            }
+            if (typeof scale === "number") {
+              model.scale.set(scale, scale, scale);
+            }
+
+            // 先更新一次世界矩阵，保证下面的包围盒计算基于最终变换
+            model.updateMatrixWorld(true);
+
+            // 为每个可见网格计算基于几何体的原生包围盒，并转换到世界坐标系；
+            // 这样碰撞盒严格来源于“看到的网格”，然后在 X/Z 方向稍微收缩一点，
+            // 使得碰撞范围更贴近视觉几何，而不是过于“虚胖”把缝隙封死。
+            model.traverse(function(obj) {
+              if (!obj.isMesh) return;
+              if (!obj.visible) return;
+
+              obj.castShadow = true;
+              obj.receiveShadow = true;
+
+              const geom = obj.geometry;
+              if (!geom) return;
+              if (!geom.boundingBox) {
+                geom.computeBoundingBox();
+              }
+              const localBox = geom.boundingBox;
+              if (!localBox) return;
+
+              const worldBox = localBox.clone();
+              worldBox.applyMatrix4(obj.matrixWorld);
+
+              const size = new THREE.Vector3();
+              worldBox.getSize(size);
+              // 过滤掉极小的细节碎片，避免到处都是看不见但会绊脚的小盒子
+              if (size.x < 0.2 && size.y < 0.2 && size.z < 0.2) return;
+
+              // 改进算法：在 X/Z 方向轻微收缩碰撞盒，使其更贴近视觉几何。
+              // 以几何盒为基础，围绕中心收缩固定余量 margin，并限制最多收缩 50%。
+              const center = new THREE.Vector3();
+              worldBox.getCenter(center);
+              const halfX = size.x * 0.5;
+              const halfZ = size.z * 0.5;
+              const margin = 0.1;
+              const shrinkHalfX = Math.max(halfX - margin, halfX * 0.5);
+              const shrinkHalfZ = Math.max(halfZ - margin, halfZ * 0.5);
+              worldBox.min.x = center.x - shrinkHalfX;
+              worldBox.max.x = center.x + shrinkHalfX;
+              worldBox.min.z = center.z - shrinkHalfZ;
+              worldBox.max.z = center.z + shrinkHalfZ;
+
+              STATIC_OBSTACLES.push(worldBox);
+            });
+
+            scene.add(model);
+          },
+          undefined,
+          function(err) {
+            console.warn("Failed to load Kenney model", url, err);
+          }
+        );
+      }
 
 	    function createEnvironment() {
 	      const rng = makeRng(worldSeed);
@@ -1007,58 +1295,7 @@ export const CLIENT_HTML = `<!DOCTYPE html>
       dirLight.shadow.camera.top = 50; dirLight.shadow.camera.bottom = -50;
       scene.add(dirLight);
 
-	      const treeGroup = new THREE.Group();
-      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4E342E });
-      const leafMat = new THREE.MeshStandardMaterial({ color: 0x1B5E20 });
-      const starMat = new THREE.MeshBasicMaterial({ color: 0xFFD700 }); 
-      
-      const ornamentMats = [
-        new THREE.MeshStandardMaterial({ color: 0xFF0000 }), 
-        new THREE.MeshStandardMaterial({ color: 0xFFD700 }), 
-        new THREE.MeshStandardMaterial({ color: 0x00BFFF })  
-      ];
-
-	      for(let i=0; i<15; i++) {
-	         const tg = new THREE.Group();
-	         const x = (rng()-0.5)*120;
-	         const z = (rng()-0.5)*120;
-	         if (Math.abs(x) < 5 && Math.abs(z) < 5) continue;
-	         const y = terrainHeight(x, z);
-	         tg.position.set(x, y, z);
-         
-         const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.8, 2, 0.8), trunkMat);
-         trunk.position.y = 1; trunk.castShadow = true;
-         tg.add(trunk);
-         
-         const layers = [
-           { w: 4.0, h: 1.5, y: 2.0 },
-           { w: 2.8, h: 1.5, y: 3.5 },
-           { w: 1.6, h: 1.5, y: 5.0 }
-         ];
-         
-         layers.forEach(layer => {
-             const leaf = new THREE.Mesh(new THREE.BoxGeometry(layer.w, layer.h, layer.w), leafMat);
-             leaf.position.y = layer.y; leaf.castShadow = true;
-             tg.add(leaf);
-	             for(let k=0; k<4; k++) {
-	                 const mat = ornamentMats[Math.floor(rng()*ornamentMats.length)];
-	                 const ball = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), mat);
-	                 const side = rng() > 0.5 ? 1 : -1;
-	                 if (rng() > 0.5) {
-	                    ball.position.set(side * layer.w/2, layer.y + (rng()-0.5), (rng()-0.5)*layer.w);
-	                 } else {
-	                    ball.position.set((rng()-0.5)*layer.w, layer.y + (rng()-0.5), side * layer.w/2);
-	                 }
-                 tg.add(ball);
-             }
-         });
-
-         const star = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), starMat);
-         star.position.y = 6.0; 
-         tg.add(star);
-         treeGroup.add(tg);
-      }
-      scene.add(treeGroup);
+      // 原版方块树已移除，树木由 Kenney Holiday Kit 的模型负责呈现
 
 	      const snowCount = 2000;
       const snowGeo = new THREE.BufferGeometry();
@@ -1069,9 +1306,55 @@ export const CLIENT_HTML = `<!DOCTYPE html>
 	          posArr[i+2] = (rng()-0.5) * 120;
 	      }
       snowGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
-      const snowMat = new THREE.PointsMaterial({ color: 0xFFFFFF, size: 0.3, transparent: true, opacity: 0.8 });
+	      const snowMat = new THREE.PointsMaterial({ color: 0xFFFFFF, size: 0.3, transparent: true, opacity: 0.8 });
 	      const snowPoints = new THREE.Points(snowGeo, snowMat);
 	      scene.add(snowPoints);
+
+        // 在整个地图上随机摆放 Kenney Holiday Kit 的所有 GLB 模型
+        (function scatterKenneyModels() {
+          const baseUrl = "/assets/kenney_holiday_kit/Models/GLB format/";
+          const half = CONFIG.mapHalf - 10;
+          const flatSampleOffset = 4;      // 用于检测地形平坦度的采样距离（略放大采样范围）
+          const maxSlopeDelta = 0.3;       // 四周高度差阈值，较小 -> 只认为“非常平”的区域可用
+          const allNames = KENNEY_OUTDOOR_GLBS.length ? KENNEY_OUTDOOR_GLBS : KENNEY_GLBS;
+          // 只取 1/5 的模型参与散布，以减少整体元素数量
+          const names = allNames.filter((_, idx) => idx % 5 === 0);
+          const instancesPerModel = 1; // 每种户外元素只实例化一次，总数量约为原来的 1/5
+          for (const name of names) {
+            for (let n = 0; n < instancesPerModel; n++) {
+              let x = 0, z = 0, y = 0;
+              let attempts = 0;
+              do {
+                x = (rng() - 0.5) * half * 2;
+                z = (rng() - 0.5) * half * 2;
+                attempts++;
+                y = terrainHeight(x, z);
+                // 要求附近区域“非常平坦”：采样八个方向 + 中心的高度
+                const h1 = terrainHeight(x + flatSampleOffset, z);
+                const h2 = terrainHeight(x - flatSampleOffset, z);
+                const h3 = terrainHeight(x, z + flatSampleOffset);
+                const h4 = terrainHeight(x, z - flatSampleOffset);
+                const h5 = terrainHeight(x + flatSampleOffset, z + flatSampleOffset);
+                const h6 = terrainHeight(x - flatSampleOffset, z + flatSampleOffset);
+                const h7 = terrainHeight(x + flatSampleOffset, z - flatSampleOffset);
+                const h8 = terrainHeight(x - flatSampleOffset, z - flatSampleOffset);
+                const hMin = Math.min(y, h1, h2, h3, h4, h5, h6, h7, h8);
+                const hMax = Math.max(y, h1, h2, h3, h4, h5, h6, h7, h8);
+                const isNearCenter = Math.abs(x) < 8 && Math.abs(z) < 8;
+                const tooSteep = (hMax - hMin) > maxSlopeDelta;
+                // 如果在出生点附近，或者地势太陡，就继续找新的点
+                if (!isNearCenter && !tooSteep) break;
+              } while (attempts < 25);
+              const rotY = rng() * Math.PI * 2;
+              // 已经放大过一次的基础尺寸再放大 3 倍，总体约为原始模型的 9 倍
+              const scale = (0.7 + rng() * 0.6) * 9.0;
+              // 使用 encodeURI 把中间的空格等字符编码成合法 URL
+              const url = encodeURI(baseUrl + name);
+              placeKenneyModel(url, { x, y, z }, rotY, scale);
+            }
+          }
+        })();
+
 	      return snowPoints;
 	    }
 

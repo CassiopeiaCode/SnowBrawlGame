@@ -1,7 +1,7 @@
 // utils.ts - 公共工具函数
 
 import { CONFIG } from "./config.ts";
-import type { Vec3, ServerMsg } from "./protocol.ts";
+import type { Vec3, ServerMsg, ClientMsg } from "./protocol.ts";
 
 export function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -53,6 +53,10 @@ export function wsSend(ws: WebSocket, msg: ServerMsg) {
   ws.send(JSON.stringify(msg));
 }
 
+export function decodeClientWsMsg(s: string): ClientMsg | null {
+  return safeParse<ClientMsg>(s);
+}
+
 // 宽松校验（避免太严格导致兼容问题）
 export function isUuidLike(s: string): boolean {
   return typeof s === "string" && s.length >= 8 && s.length <= 64;
@@ -91,4 +95,3 @@ export function intersectsPlayerCylinder(p: Vec3, playerPos: Vec3): boolean {
   const yMax = playerPos.y + CONFIG.GAME.hitHeight;
   return p.y >= yMin && p.y <= yMax;
 }
-

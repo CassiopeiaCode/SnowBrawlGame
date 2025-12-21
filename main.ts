@@ -3,11 +3,26 @@
 // WS   /ws     -> WebSocket
 // GET  /health -> health
 
-import { CONFIG, PORT } from "./config.ts";
+import { CONFIG, PORT, WS_SECRET } from "./config.ts";
 import { CLIENT_HTML } from "./client_html.ts";
 import { json, text } from "./utils.ts";
 import { clients, events, lastSeenSeq, playersCache } from "./state.ts";
 import { handleWs } from "./ws.ts";
+
+// 简单的静态资源 MIME 类型映射，用于 /assets 下的文件
+function guessContentType(path: string): string {
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".gif")) return "image/gif";
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".svg")) return "image/svg+xml";
+  if (lower.endsWith(".json")) return "application/json; charset=utf-8";
+  if (lower.endsWith(".html") || lower.endsWith(".htm")) return "text/html; charset=utf-8";
+  if (lower.endsWith(".js")) return "text/javascript; charset=utf-8";
+  if (lower.endsWith(".txt")) return "text/plain; charset=utf-8";
+  return "application/octet-stream";
+}
 
 Deno.serve({ port: PORT }, async (req) => {
   const url = new URL(req.url);
@@ -34,8 +49,37 @@ Deno.serve({ port: PORT }, async (req) => {
     return await handleWs(req);
   }
 
+  // 提供 /assets/* 静态资源访问，用于 Kenney Holiday Kit 等美术资源
+  if (url.pathname.startsWith("/assets/")) {
+    // 注意：URL.pathname 中仍然是编码形式（空格会是 %20），文件系统路径需要先解码
+    const encodedPath = url.pathname;
+    // 防御性检查：不允许 .. 逃逸
+    if (encodedPath.includes("..")) {
+      return text("Invalid path", 400);
+    }
+    const decodedPath = decodeURI(encodedPath);
+    const filePath = "." + decodedPath;
+    try {
+      const file = await Deno.open(filePath, { read: true });
+      const contentType = guessContentType(filePath);
+      return new Response(file.readable, {
+        headers: {
+          "content-type": contentType,
+          "access-control-allow-origin": CONFIG.CORS,
+          // 提示浏览器长期缓存静态资源（美术/模型很少变更）
+          "cache-control": "public, max-age=31536000, immutable",
+        },
+      });
+    } catch {
+      return text("Not Found", 404);
+    }
+  }
+
   if (url.pathname === "/") {
-    return new Response(CLIENT_HTML, {
+    // 在 HTML 模板中注入本次服务器启动时生成的 WS 加密秘钥，
+    // 在客户端看来是硬编码的常量，但每次重启都会变化。
+    const html = CLIENT_HTML.replace(/__WS_SECRET__/g, WS_SECRET);
+    return new Response(html, {
       headers: {
         "content-type": "text/html; charset=utf-8",
         "access-control-allow-origin": CONFIG.CORS,

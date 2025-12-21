@@ -38,3 +38,10 @@ export const PORT = Number(Deno.env.get("PORT") ?? "8000");
 const seedBuf = new Uint32Array(1);
 crypto.getRandomValues(seedBuf);
 export const WORLD_SEED = seedBuf[0] >>> 0;
+
+// 每次服务器启动生成一个 WebSocket 简单加密秘钥，用于对 WS 载荷做轻量混淆
+const wsKeyBuf = new Uint8Array(16);
+crypto.getRandomValues(wsKeyBuf);
+export const WS_SECRET = Array.from(wsKeyBuf)
+  .map((b) => b.toString(16).padStart(2, "0"))
+  .join("");

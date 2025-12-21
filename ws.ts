@@ -2,7 +2,7 @@
 
 import { CONFIG, WORLD_SEED } from "./config.ts";
 import type { ClientMsg } from "./protocol.ts";
-import { safeParse, wsSend } from "./utils.ts";
+import { decodeClientWsMsg, wsSend } from "./utils.ts";
 import {
   WSClient,
   appendEventInMem,
@@ -41,7 +41,7 @@ export async function handleWs(req: Request): Promise<Response> {
 
   socket.onmessage = async (evt) => {
     if (typeof evt.data !== "string") return;
-    const msg = safeParse<ClientMsg>(evt.data);
+    const msg = decodeClientWsMsg(evt.data);
     if (!msg) return;
 
     const now = Date.now();
