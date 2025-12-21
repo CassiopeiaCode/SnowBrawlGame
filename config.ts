@@ -4,19 +4,21 @@ export const CONFIG = {
   WORLD: "global",
   CORS: "*",
   RATE: { windowMs: 10_000, maxMsgs: 1200 },
-  STATE_HZ: 12,
+  STATE_HZ: 20, // 服务器期望的客户端 state 上报频率（Hz）
   MAX_NAME: 20,
   MAX_CHAT: 80,
   CLEANUP_IDLE_MS: 60_000,
   CLEANUP_SCAN_MS: 10_000,
+  MAP_HALF: 95, // 地图半径（玩家活动区域）与前端保持一致
 
   GAME: {
     gravity: 20,
     snowballSpeed: 25,
     snowballLifeSec: 3,
     snowballSimSteps: 60, // 命中判定离散步数
-    hitRadius: 0.6, // 近似圆柱半径
-    hitHeight: 1.8, // 近似人体高度
+    // 命中判定圆柱：稍微放大一点，让雪球更容易打中玩家
+    hitRadius: 0.9, // 近似圆柱半径（原来约 0.6）
+    hitHeight: 2.2, // 近似人体高度（原来约 1.8）
     knockbackForce: 26,
     knockUp: 1.2,
     damage: 10,
@@ -32,3 +34,7 @@ export const TTL = {
 
 export const PORT = Number(Deno.env.get("PORT") ?? "8000");
 
+// 每次服务器启动生成一个世界种子，用于地形等需要全客户端一致的随机性
+const seedBuf = new Uint32Array(1);
+crypto.getRandomValues(seedBuf);
+export const WORLD_SEED = seedBuf[0] >>> 0;

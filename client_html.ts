@@ -120,9 +120,9 @@ export const CLIENT_HTML = `<!DOCTYPE html>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
-  <script>
-    // 简单 randomUUID 兼容实现：优先使用原生，其次使用 getRandomValues，最后退回 Math.random
-    function randomId() {
+	  <script>
+	    // 简单 randomUUID 兼容实现：优先使用原生，其次使用 getRandomValues，最后退回 Math.random
+	    function randomId() {
       const g = (typeof crypto !== "undefined") ? crypto : (typeof window !== "undefined" ? (window.crypto || window.msCrypto) : null);
       if (g && typeof g.randomUUID === "function") {
         return g.randomUUID();
@@ -141,20 +141,78 @@ export const CLIENT_HTML = `<!DOCTYPE html>
           hex.slice(20)
         );
       }
-      return "id-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
-    }
+	      return "id-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+	    }
 
-    function appendChatLog(line) {
-      const log = document.getElementById("chat-log");
-      if (!log) return;
-      const item = document.createElement("div");
-      item.textContent = line;
-      log.appendChild(item);
-      // 只保留最近 50 条
-      while (log.childNodes.length > 50) {
-        log.removeChild(log.firstChild);
-      }
-      log.scrollTop = log.scrollHeight;
+	    function appendChatLog(line) {
+	      const log = document.getElementById("chat-log");
+	      if (!log) return;
+	      const item = document.createElement("div");
+	      item.textContent = line;
+	      log.appendChild(item);
+	      // 只保留最近 50 条
+	      while (log.childNodes.length > 50) {
+	        log.removeChild(log.firstChild);
+	      }
+	      log.scrollTop = log.scrollHeight;
+	      // 30 秒后自动移除这条消息
+	      setTimeout(() => {
+	        if (item.parentNode === log) {
+	          log.removeChild(item);
+	        }
+	      }, 30_000);
+	    }
+	    // 简单字符串哈希，用于把名字映射到稳定的颜色
+	    function hashString(str) {
+	      let h = 0;
+	      for (let i = 0; i < str.length; i++) {
+	        h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+	      }
+	      return h >>> 0;
+	    }
+	    // 马卡龙色系调色板（柔和的粉色/蓝色/绿色等）
+	    const PASTEL_COLORS = [
+	      0xFFB3BA, // 粉红
+	      0xFFDFBA, // 桃色
+	      0xFFFFBA, // 淡黄
+	      0xBAFFC9, // 薄荷绿
+	      0xBAE1FF, // 婴儿蓝
+	      0xE0BBE4, // 薰衣草紫
+	      0xFFD6E0, // 淡玫瑰
+	      0xCFFAFE, // 浅青
+	    ];
+	    function pickPastelPair(key) {
+	      const h = hashString(key || "");
+	      const main = PASTEL_COLORS[h % PASTEL_COLORS.length];
+	      let pants = PASTEL_COLORS[(h >> 3) % PASTEL_COLORS.length];
+	      if (pants === main) {
+	        pants = PASTEL_COLORS[(h >> 5) % PASTEL_COLORS.length];
+	      }
+	      return { shirt: main, pants };
+	    }
+	    // 简单种子随机数（mulberry32）
+	    function makeRng(seed) {
+	      let s = seed >>> 0;
+	      return function() {
+	        s |= 0;
+	        s = (s + 0x6D2B79F5) | 0;
+	        let t = Math.imul(s ^ (s >>> 15), 1 | s);
+	        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+	        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	      };
+	    }
+    // 地形高度函数：基于世界种子 + 三角函数叠加，制造起伏较大的地形
+    function terrainHeight(x, z) {
+      const scale1 = 0.06;
+      const scale2 = 0.12;
+      const s = worldSeed * 0.0001;
+      const n1 = Math.sin(x * scale1 + s * 13.37) + Math.cos(z * scale1 - s * 7.21);
+      const n2 = Math.sin((x + 1000) * scale2 - s * 3.17) - Math.cos((z - 500) * scale2 + s * 9.99);
+      let h = n1 * 0.7 + n2 * 0.3;
+      // 增加陡峭程度，并整体抬高到 > 0（避免服务端 y<0 时的隐形地板问题）
+      const sign = h >= 0 ? 1 : -1;
+      h = sign * Math.pow(Math.abs(h), 1.8) * 2.5; // 原始约 [-5, 5]
+      return h + 6; // 整体抬升，保证最低高度 > 0
     }
     const CONFIG = {
       gravity: 22,
@@ -163,10 +221,11 @@ export const CLIENT_HTML = `<!DOCTYPE html>
       jumpForce: 9.5,
       snowballSpeed: 28,
       snowballCooldown: 250, 
-      netSendHz: 12,
+      netSendHz: 20,
       remoteLerp: 12,
       lookSensitivity: 0.002,
       minPitch: -1.5, maxPitch: 1.5, 
+      mapHalf: 95,
     };
 
     let scene, camera, renderer, clock;
@@ -185,6 +244,11 @@ export const CLIENT_HTML = `<!DOCTYPE html>
     let uiHidden = false;     // 是否隐藏左侧聊天和右侧按键提示
 
     let isPointerLocked = false;
+
+    // 世界种子与环境
+    let worldSeed = 1;
+    let snowSystem = null;
+    let environmentReady = false;
 
     function setDeadUI(on) {
       document.getElementById("dead-overlay").style.display = on ? "flex" : "none";
@@ -282,10 +346,21 @@ export const CLIENT_HTML = `<!DOCTYPE html>
           this.scheduleReconnect();
         };
         ws.onmessage = (ev) => {
-          let msg; try { msg = JSON.parse(ev.data); } catch { return; }
-
-          if (msg.t === "welcome") {
+	          let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+	
+	          if (msg.t === "welcome") {
+            // 新连接 / 重连：如果已有本地玩家且 id 不同，清理旧的本地玩家
+            if (localPlayer && localPlayer.id !== msg.id) {
+              removePlayer(localPlayer.id);
+              localPlayer = null;
+            }
             localPlayerId = msg.id;
+            if (typeof msg.seed === "number") {
+              worldSeed = msg.seed;
+              ensureEnvironment();
+            } else {
+              ensureEnvironment();
+            }
             if (this.pendingSnapshot) { this.applySnapshot(this.pendingSnapshot); this.pendingSnapshot = null; }
 
           } else if (msg.t === "snapshot") {
@@ -414,21 +489,25 @@ export const CLIENT_HTML = `<!DOCTYPE html>
             const sb = new Snowball(ev.id, ev.origin, ev.dir, ev.ownerId);
             snowballs.push(sb); snowballsById.set(ev.id, sb);
             break;
-          case "hit": 
-            if (ev.victimId === localPlayerId && localPlayer) {
-              localPlayer.applyKnockback(ev.impulse);
-              localPlayer.health = ev.victimHp;
-              localPlayer.lastHpAt = ev.at || Date.now();
-              setHpUI(localPlayer.health);
-              const flash = document.createElement("div");
-              flash.style.position = "absolute"; flash.style.top=0; flash.style.left=0;
-              flash.style.width="100%"; flash.style.height="100%";
-              flash.style.background="rgba(255,0,0,0.3)"; flash.style.pointerEvents="none";
-              document.body.appendChild(flash);
-              setTimeout(()=>flash.remove(), 100);
-              if (localPlayer.health <= 0) { localPlayer.dead = true; setDeadUI(true); }
-            }
-            break;
+	          case "hit": 
+	            {
+	              const victim = playersById.get(ev.victimId);
+	              if (victim) victim.onHit();
+	              if (ev.victimId === localPlayerId && localPlayer) {
+	                localPlayer.applyKnockback(ev.impulse);
+	                localPlayer.health = ev.victimHp;
+	                localPlayer.lastHpAt = ev.at || Date.now();
+	                setHpUI(localPlayer.health);
+	                const flash = document.createElement("div");
+	                flash.style.position = "absolute"; flash.style.top=0; flash.style.left=0;
+	                flash.style.width="100%"; flash.style.height="100%";
+	                flash.style.background="rgba(255,0,0,0.3)"; flash.style.pointerEvents="none";
+	                document.body.appendChild(flash);
+	                setTimeout(()=>flash.remove(), 100);
+	                if (localPlayer.health <= 0) { localPlayer.dead = true; setDeadUI(true); }
+	              }
+	            }
+	            break;
           case "rename": 
             { const p = playersById.get(ev.playerId); if (p) p.updateNameLabel(ev.name); } break;
           case "death":
@@ -463,11 +542,11 @@ export const CLIENT_HTML = `<!DOCTYPE html>
     }
 
 	    // --- MC 风格人物模型 (节日版) ---
-	    class PlayerModel {
-	      constructor(scene, id, pos, name, isRemote) {
-	        this.id = id;
-	        this.isRemote = isRemote;
-	        this.name = name;
+		    class PlayerModel {
+		      constructor(scene, id, pos, name, isRemote) {
+		        this.id = id;
+		        this.isRemote = isRemote;
+		        this.name = name;
 	        this.pingMs = null;
 	        this.scene = scene;
         this.dead = false;
@@ -479,36 +558,45 @@ export const CLIENT_HTML = `<!DOCTYPE html>
         this.isCrouching = false;
         this.targetCrouch = false;
         
-        this.input = { w: false, a: false, s: false, d: false, space: false, shift: false, r: false };
-        
-        this.targetPos = new THREE.Vector3(pos.x, pos.y, pos.z);
-        this.targetRotY = 0;
-        this.targetVel = new THREE.Vector3();
+	        this.input = { w: false, a: false, s: false, d: false, space: false, shift: false, r: false };
+	        
+	        this.targetPos = new THREE.Vector3(pos.x, pos.y, pos.z);
+	        this.targetRotY = 0;
+	        this.targetVel = new THREE.Vector3();
 
-        const isRed = (id.charCodeAt(0) % 2 === 0);
-        const colorMain = isRed ? 0xD32F2F : 0x2E7D32; 
-        const colorSec = isRed ? 0xFFFFFF : 0xC62828;  
-        
-        const skinMat = new THREE.MeshStandardMaterial({ color: 0xFACC9E }); 
-        const shirtMat = new THREE.MeshStandardMaterial({ color: colorMain });
-        const pantsMat = new THREE.MeshStandardMaterial({ color: 0x303F9F });
+	        // 基于玩家名字的马卡龙配色：相同名字 -> 相同颜色
+	        const paletteKey = (name && name.trim()) ? name.trim() : id;
+	        const pastel = pickPastelPair(paletteKey);
+	        const buttonColor = 0xFFFFFF;
+	        
+		        this.skinMat = new THREE.MeshStandardMaterial({ color: 0xFACC9E }); 
+		        this.shirtMat = new THREE.MeshStandardMaterial({ color: pastel.shirt });
+		        this.pantsMat = new THREE.MeshStandardMaterial({ color: pastel.pants });
+	        this.baseColors = {
+	          skin: this.skinMat.color.getHex(),
+	          shirt: this.shirtMat.color.getHex(),
+	          pants: this.pantsMat.color.getHex(),
+	        };
+	        this.hitFlashTime = 0;
 
-        this.mesh = new THREE.Group();
-        this.mesh.position.set(pos.x, pos.y, pos.z);
+	        this.mesh = new THREE.Group();
+	        // 对于本地玩家，初始 Y 取地形高度，避免出生时悬空/埋地
+	        const initialY = isRemote ? pos.y : terrainHeight(pos.x, pos.z);
+	        this.mesh.position.set(pos.x, initialY, pos.z);
 
         // --- 1. 身体 ---
         this.bodyGroup = new THREE.Group();
         this.bodyGroup.position.y = 0.75; 
         this.mesh.add(this.bodyGroup);
 
-        const torsoGeo = new THREE.BoxGeometry(0.4, 0.6, 0.2);
-        this.torso = new THREE.Mesh(torsoGeo, shirtMat);
+	        const torsoGeo = new THREE.BoxGeometry(0.4, 0.6, 0.2);
+	        this.torso = new THREE.Mesh(torsoGeo, this.shirtMat);
         this.torso.position.y = 0.3; 
         this.torso.castShadow = true;
         this.bodyGroup.add(this.torso);
 
-        const buttonGeo = new THREE.BoxGeometry(0.05, 0.05, 0.02);
-        const btnMat = new THREE.MeshBasicMaterial({ color: colorSec });
+	        const buttonGeo = new THREE.BoxGeometry(0.05, 0.05, 0.02);
+	        const btnMat = new THREE.MeshBasicMaterial({ color: buttonColor });
         const btn1 = new THREE.Mesh(buttonGeo, btnMat); btn1.position.set(0, 0.4, 0.11); this.bodyGroup.add(btn1);
         const btn2 = new THREE.Mesh(buttonGeo, btnMat); btn2.position.set(0, 0.2, 0.11); this.bodyGroup.add(btn2);
 
@@ -517,8 +605,8 @@ export const CLIENT_HTML = `<!DOCTYPE html>
         this.headGroup.position.y = 0.6; 
         this.bodyGroup.add(this.headGroup);
 
-        const headGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
-        this.head = new THREE.Mesh(headGeo, skinMat);
+	        const headGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+	        this.head = new THREE.Mesh(headGeo, this.skinMat);
         this.head.position.y = 0.2; 
         this.head.castShadow = true;
         this.headGroup.add(this.head);
@@ -558,14 +646,14 @@ export const CLIENT_HTML = `<!DOCTYPE html>
             return pivot;
         };
 
-        this.rightArm = createLimb(0.29, 0.55, shirtMat);
+	        this.rightArm = createLimb(0.29, 0.55, this.shirtMat);
         this.bodyGroup.add(this.rightArm);
-        this.leftArm = createLimb(-0.29, 0.55, shirtMat);
+	        this.leftArm = createLimb(-0.29, 0.55, this.shirtMat);
         this.bodyGroup.add(this.leftArm);
 
-        this.rightLeg = createLimb(0.1, 0.75, pantsMat);
+	        this.rightLeg = createLimb(0.1, 0.75, this.pantsMat);
         this.mesh.add(this.rightLeg);
-        this.leftLeg = createLimb(-0.1, 0.75, pantsMat);
+	        this.leftLeg = createLimb(-0.1, 0.75, this.pantsMat);
         this.mesh.add(this.leftLeg);
 
 	        this.nameSprite = this.createTextSprite(this.displayName(), 24, false);
@@ -589,6 +677,10 @@ export const CLIENT_HTML = `<!DOCTYPE html>
 	          return this.name + " (" + this.pingMs + "ms)";
 	        }
 	        return this.name;
+	      }
+
+	      onHit() {
+	        this.hitFlashTime = 0.25; // 250ms 闪红
 	      }
 
 	      updateNameLabel(name) {
@@ -643,8 +735,11 @@ export const CLIENT_HTML = `<!DOCTYPE html>
         this.chatTimer = setTimeout(() => { this.chatSprite.visible = false; }, 5000);
       }
 
-      setRemoteTarget(pos, rotY, vel, crouch) {
-        this.targetPos.set(pos.x, pos.y, pos.z);
+	      setRemoteTarget(pos, rotY, vel, crouch) {
+	        const half = CONFIG.mapHalf;
+	        const clampedX = THREE.MathUtils.clamp(pos.x, -half, half);
+	        const clampedZ = THREE.MathUtils.clamp(pos.z, -half, half);
+	        this.targetPos.set(clampedX, pos.y, clampedZ);
         this.targetRotY = rotY;
         this.targetVel.set(vel.x, vel.y, vel.z);
         this.targetCrouch = !!crouch;
@@ -676,14 +771,14 @@ export const CLIENT_HTML = `<!DOCTYPE html>
         this.onGround = false;
       }
 
-      update(dt) {
-        if (this.dead) {
-             this.mesh.rotation.x = -Math.PI / 2;
-             this.mesh.position.y = 0.2;
-             return;
+	      update(dt) {
+	        if (this.dead) {
+	             this.mesh.rotation.x = -Math.PI / 2;
+             this.mesh.position.y = terrainHeight(this.mesh.position.x, this.mesh.position.z) + 0.2;
+	             return;
         } else {
              this.mesh.rotation.x = 0; 
-        }
+	        }
 
         if (this.isRemote) {
           const k = 1 - Math.exp(-CONFIG.remoteLerp * dt);
@@ -695,10 +790,10 @@ export const CLIENT_HTML = `<!DOCTYPE html>
           this.mesh.rotation.y = curY + (tarY - curY) * k;
           this.velocity.lerp(this.targetVel, k);
           this.isCrouching = this.targetCrouch;
-        } else {
-          let speed = CONFIG.moveSpeed;
-          this.isCrouching = this.input.shift;
-          if (this.isCrouching) speed = CONFIG.crouchSpeed;
+	        } else {
+	          let speed = CONFIG.moveSpeed;
+	          this.isCrouching = this.input.shift;
+	          if (this.isCrouching) speed = CONFIG.crouchSpeed;
 
           const moveDir = new THREE.Vector3();
           if (this.input.w) moveDir.z -= 1;
@@ -722,19 +817,41 @@ export const CLIENT_HTML = `<!DOCTYPE html>
           }
           
           // R 嘲讽旋转
-          if (this.input.r) {
-             this.mesh.rotation.y += 20 * dt; // 疯狂旋转
-             cameraYaw = this.mesh.rotation.y; // 同步视角
-          }
+	          if (this.input.r) {
+	             this.mesh.rotation.y += 20 * dt; // 疯狂旋转
+	             cameraYaw = this.mesh.rotation.y; // 同步视角
+	          }
+	
+	          this.mesh.position.add(this.velocity.clone().multiplyScalar(dt));
+	          // 限制玩家不能走出地图
+	          const half = CONFIG.mapHalf;
+	          this.mesh.position.x = THREE.MathUtils.clamp(this.mesh.position.x, -half, half);
+	          this.mesh.position.z = THREE.MathUtils.clamp(this.mesh.position.z, -half, half);
 
-          this.mesh.position.add(this.velocity.clone().multiplyScalar(dt));
-          if (this.mesh.position.y < 0) {
-            this.mesh.position.y = 0; this.velocity.y = 0; this.onGround = true;
+	          const groundY = terrainHeight(this.mesh.position.x, this.mesh.position.z);
+	          if (this.mesh.position.y <= groundY) {
+	            this.mesh.position.y = groundY;
+	            this.velocity.y = 0;
+            this.onGround = true;
           }
-        }
+	        }
 
-        this.updateAnimation(dt);
-      }
+	        this.updateAnimation(dt);
+
+	        // 命中闪红效果：在短时间内把皮肤/衣服/裤子染红，然后恢复
+	        if (this.hitFlashTime > 0) {
+	          this.hitFlashTime -= dt;
+	          const t = Math.max(this.hitFlashTime / 0.25, 0);
+	          const flashColor = 0xFF4444;
+	          this.skinMat.color.setHex(flashColor);
+	          this.shirtMat.color.setHex(flashColor);
+	          this.pantsMat.color.setHex(flashColor);
+	        } else {
+	          this.skinMat.color.setHex(this.baseColors.skin);
+          this.shirtMat.color.setHex(this.baseColors.shirt);
+	          this.pantsMat.color.setHex(this.baseColors.pants);
+	        }
+	      }
 
       updateAnimation(dt) {
          const hSpeed = Math.hypot(this.velocity.x, this.velocity.z);
@@ -833,7 +950,11 @@ export const CLIENT_HTML = `<!DOCTYPE html>
         this.mesh.position.add(this.velocity.clone().multiplyScalar(dt));
         this.mesh.rotation.x += dt * 10;
         this.mesh.rotation.y += dt * 10;
-        if (this.mesh.position.y < 0) { this.destroy(); }
+        const groundY = terrainHeight(this.mesh.position.x, this.mesh.position.z);
+        if (this.mesh.position.y <= groundY) {
+          // 视觉上在碰到地形时销毁雪球
+          this.destroy();
+        }
       }
 
       destroy() {
@@ -845,24 +966,37 @@ export const CLIENT_HTML = `<!DOCTYPE html>
     }
 
 
-    function createEnvironment() {
-      const groundSize = 200;
-      const canvas = document.createElement('canvas'); canvas.width = 64; canvas.height = 64;
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0,0,64,64); 
-      for(let i=0;i<200;i++) {
-          ctx.fillStyle = Math.random()>0.5 ? '#E0F7FA' : '#B2EBF2';
-          ctx.fillRect(Math.floor(Math.random()*64), Math.floor(Math.random()*64), 2, 2);
-      }
+	    function createEnvironment() {
+	      const rng = makeRng(worldSeed);
+	      const groundSize = 200;
+	      const canvas = document.createElement('canvas'); canvas.width = 64; canvas.height = 64;
+	      const ctx = canvas.getContext('2d');
+	      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0,0,64,64); 
+	      for(let i=0;i<200;i++) {
+	          ctx.fillStyle = rng()>0.5 ? '#E0F7FA' : '#B2EBF2';
+	          ctx.fillRect(Math.floor(rng()*64), Math.floor(rng()*64), 2, 2);
+	      }
       const gridTex = new THREE.CanvasTexture(canvas);
       gridTex.magFilter = THREE.NearestFilter;
       gridTex.wrapS = THREE.RepeatWrapping; gridTex.wrapT = THREE.RepeatWrapping;
       gridTex.repeat.set(groundSize/4, groundSize/4);
       
-      const groundGeo = new THREE.PlaneGeometry(groundSize, groundSize);
-      const groundMat = new THREE.MeshStandardMaterial({ map: gridTex, roughness: 0.5, metalness: 0.1 });
-      const ground = new THREE.Mesh(groundGeo, groundMat);
-      ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true;
+	      const groundGeo = new THREE.PlaneGeometry(groundSize, groundSize, 128, 128);
+	      // 先把平面旋转到 XZ 平面（Y 为高度），再写入高度
+	      groundGeo.rotateX(-Math.PI / 2);
+	      const posAttr = groundGeo.attributes.position;
+	      const posArrGround = posAttr.array;
+	      for (let i = 0; i < posArrGround.length; i += 3) {
+	        const x = posArrGround[i];
+	        const z = posArrGround[i + 2];
+	        posArrGround[i + 1] = terrainHeight(x, z); // Y 轴为高度
+	      }
+	      posAttr.needsUpdate = true;
+	      groundGeo.computeVertexNormals();
+
+	      const groundMat = new THREE.MeshStandardMaterial({ map: gridTex, roughness: 0.5, metalness: 0.1 });
+	      const ground = new THREE.Mesh(groundGeo, groundMat);
+	      ground.receiveShadow = true;
       scene.add(ground);
 
       const amb = new THREE.AmbientLight(0x8899AA, 0.6); scene.add(amb);
@@ -873,7 +1007,7 @@ export const CLIENT_HTML = `<!DOCTYPE html>
       dirLight.shadow.camera.top = 50; dirLight.shadow.camera.bottom = -50;
       scene.add(dirLight);
 
-      const treeGroup = new THREE.Group();
+	      const treeGroup = new THREE.Group();
       const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4E342E });
       const leafMat = new THREE.MeshStandardMaterial({ color: 0x1B5E20 });
       const starMat = new THREE.MeshBasicMaterial({ color: 0xFFD700 }); 
@@ -884,12 +1018,13 @@ export const CLIENT_HTML = `<!DOCTYPE html>
         new THREE.MeshStandardMaterial({ color: 0x00BFFF })  
       ];
 
-      for(let i=0; i<15; i++) {
-         const tg = new THREE.Group();
-         const x = (Math.random()-0.5)*120;
-         const z = (Math.random()-0.5)*120;
-         if (Math.abs(x) < 5 && Math.abs(z) < 5) continue;
-         tg.position.set(x, 0, z);
+	      for(let i=0; i<15; i++) {
+	         const tg = new THREE.Group();
+	         const x = (rng()-0.5)*120;
+	         const z = (rng()-0.5)*120;
+	         if (Math.abs(x) < 5 && Math.abs(z) < 5) continue;
+	         const y = terrainHeight(x, z);
+	         tg.position.set(x, y, z);
          
          const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.8, 2, 0.8), trunkMat);
          trunk.position.y = 1; trunk.castShadow = true;
@@ -905,15 +1040,15 @@ export const CLIENT_HTML = `<!DOCTYPE html>
              const leaf = new THREE.Mesh(new THREE.BoxGeometry(layer.w, layer.h, layer.w), leafMat);
              leaf.position.y = layer.y; leaf.castShadow = true;
              tg.add(leaf);
-             for(let k=0; k<4; k++) {
-                 const mat = ornamentMats[Math.floor(Math.random()*ornamentMats.length)];
-                 const ball = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), mat);
-                 const side = Math.random() > 0.5 ? 1 : -1;
-                 if (Math.random() > 0.5) {
-                    ball.position.set(side * layer.w/2, layer.y + (Math.random()-0.5), (Math.random()-0.5)*layer.w);
-                 } else {
-                    ball.position.set((Math.random()-0.5)*layer.w, layer.y + (Math.random()-0.5), side * layer.w/2);
-                 }
+	             for(let k=0; k<4; k++) {
+	                 const mat = ornamentMats[Math.floor(rng()*ornamentMats.length)];
+	                 const ball = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), mat);
+	                 const side = rng() > 0.5 ? 1 : -1;
+	                 if (rng() > 0.5) {
+	                    ball.position.set(side * layer.w/2, layer.y + (rng()-0.5), (rng()-0.5)*layer.w);
+	                 } else {
+	                    ball.position.set((rng()-0.5)*layer.w, layer.y + (rng()-0.5), side * layer.w/2);
+	                 }
                  tg.add(ball);
              }
          });
@@ -925,22 +1060,28 @@ export const CLIENT_HTML = `<!DOCTYPE html>
       }
       scene.add(treeGroup);
 
-      const snowCount = 2000;
+	      const snowCount = 2000;
       const snowGeo = new THREE.BufferGeometry();
-      const posArr = new Float32Array(snowCount * 3);
-      for(let i=0; i<snowCount*3; i+=3) {
-          posArr[i] = (Math.random()-0.5) * 120;
-          posArr[i+1] = Math.random() * 50; 
-          posArr[i+2] = (Math.random()-0.5) * 120;
-      }
+	      const posArr = new Float32Array(snowCount * 3);
+	      for(let i=0; i<snowCount*3; i+=3) {
+	          posArr[i] = (rng()-0.5) * 120;
+	          posArr[i+1] = rng() * 50; 
+	          posArr[i+2] = (rng()-0.5) * 120;
+	      }
       snowGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
       const snowMat = new THREE.PointsMaterial({ color: 0xFFFFFF, size: 0.3, transparent: true, opacity: 0.8 });
-      const snowSystem = new THREE.Points(snowGeo, snowMat);
-      scene.add(snowSystem);
-      return snowSystem;
-    }
+	      const snowPoints = new THREE.Points(snowGeo, snowMat);
+	      scene.add(snowPoints);
+	      return snowPoints;
+	    }
 
-    function init() {
+	    function ensureEnvironment() {
+	      if (environmentReady) return;
+	      snowSystem = createEnvironment();
+	      environmentReady = true;
+	    }
+
+	    function init() {
       scene = new THREE.Scene(); scene.background = new THREE.Color(0xD6EAF8); scene.fog = new THREE.Fog(0xD6EAF8, 15, 70);
       
       camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 1000);
@@ -951,8 +1092,7 @@ export const CLIENT_HTML = `<!DOCTYPE html>
       document.getElementById("canvas-container").appendChild(renderer.domElement);
       clock = new THREE.Clock();
       
-      const snowSystem = createEnvironment();
-      networkManager = new NetworkManager();
+	      networkManager = new NetworkManager();
 
       const nameInput = document.getElementById("name-input");
       const chatInput = document.getElementById("chat-input");

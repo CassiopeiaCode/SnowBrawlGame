@@ -80,7 +80,14 @@ export async function serverHandleState(clientId: string, name: string, msg: Cli
   const vel = isFiniteVec3(msg.vel) ? msg.vel : { x: 0, y: 0, z: 0 };
   const crouch = !!msg.crouch;
 
-  if (Math.abs(msg.pos.x) > 5000 || Math.abs(msg.pos.y) > 5000 || Math.abs(msg.pos.z) > 5000) return;
+  // 服务器侧防御：玩家不能跑出地图边界
+  if (
+    Math.abs(msg.pos.x) > CONFIG.MAP_HALF + 5 ||
+    Math.abs(msg.pos.z) > CONFIG.MAP_HALF + 5 ||
+    Math.abs(msg.pos.y) > 5000
+  ) {
+    return;
+  }
 
   const now = Date.now();
   const prev = playersCache.get(clientId);

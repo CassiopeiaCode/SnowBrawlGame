@@ -183,8 +183,8 @@ export function enqueuePendingState(s: PendingState) {
   pendingStates.set(s.id, s);
 }
 
-// 低频 snapshot：兜底纠偏
-const STATE_SYNC_HZ = 2;
+// 低频 snapshot：兜底纠偏（全量）：1Hz 即可
+const STATE_SYNC_HZ = 1;
 let stateSyncStarted = false;
 
 export function startStateSyncOnce() {

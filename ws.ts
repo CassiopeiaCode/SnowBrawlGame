@@ -1,6 +1,6 @@
 // ws.ts - WebSocket 入口与消息分发
 
-import { CONFIG } from "./config.ts";
+import { CONFIG, WORLD_SEED } from "./config.ts";
 import type { ClientMsg } from "./protocol.ts";
 import { safeParse, wsSend } from "./utils.ts";
 import {
@@ -71,7 +71,7 @@ export async function handleWs(req: Request): Promise<Response> {
       // join 事件（会广播、也会 applyEventToCache）
       await appendEventInMem({ t: "join", player: snap });
 
-      wsSend(socket, { t: "welcome", id: client.id, world: CONFIG.WORLD, now });
+      wsSend(socket, { t: "welcome", id: client.id, world: CONFIG.WORLD, now, seed: WORLD_SEED });
 
       // hello 后给一份 snapshot（纯内存不再 load KV 权威集合）
       wsSend(socket, {
@@ -137,4 +137,3 @@ export async function handleWs(req: Request): Promise<Response> {
 
   return response;
 }
-

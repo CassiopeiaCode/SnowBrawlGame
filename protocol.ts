@@ -78,7 +78,7 @@ export type WorldEvent =
     };
 
 export type ServerMsg =
-  | { t: "welcome"; id: string; world: string; now: number }
+  | { t: "welcome"; id: string; world: string; now: number; seed: number }
   | { t: "snapshot"; world: string; players: PlayerSnapshot[]; latestSeq: number }
   | { t: "event"; ev: WorldEvent }
   | { t: "pong"; now: number }
