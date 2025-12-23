@@ -1,0 +1,35 @@
+<div id="dead-overlay" style="
+  position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+  background:rgba(150,0,0,0.6); color:white; font-size:48px; font-weight:bold; z-index:9999;
+  text-shadow:4px 4px 0 #000; flex-direction: column;
+">
+  <div>你死了!</div>
+  <div style="font-size: 24px; margin-top: 10px;">重生倒计时...</div>
+</div>
+
+  <div id="canvas-container"></div>
+  <div id="crosshair"></div>
+  <div id="click-to-play">点击屏幕<br>加入雪球大战</div>
+
+  <div id="ui-layer">
+    <div id="chat-container">
+      <div style="color: #55FF55; font-weight:bold; font-size: 16px; margin-bottom: 4px; text-shadow: 2px 2px 0 #000;">🎄 MC 圣诞服</div>
+      <div id="chat-log"></div>
+      <input type="text" id="name-input" placeholder="输入昵称" maxlength="12" />
+      <input type="text" id="chat-input" placeholder="按 T 或回车聊天" maxlength="80" />
+      <div id="net-status">🔴 未连接</div>
+      <div id="hp-bar-bg"><div id="hp-bar-fill"></div></div>
+      <div id="hp-text">❤❤❤❤❤</div>
+    </div>
+
+    <div id="controls-hint">
+      <p><span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span> 移动</p>
+      <p><span class="key">SHIFT</span> 潜行</p>
+      <p><span class="key">SPACE</span> 跳跃</p>
+      <p><span class="key">左键</span> 丢雪球</p>
+      <p><span class="key">R</span>旋转嘲讽</p>
+      <p><span class="key">V</span> 切换第一/第三人称</p>
+      <p><span class="key">H</span> 隐藏/显示 UI</p>
+      <p>ESC 释放鼠标</p>
+    </div>
+  </div>

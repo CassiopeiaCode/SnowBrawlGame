@@ -1,0 +1,72 @@
+body { margin: 0; overflow: hidden; background-color: #D6EAF8; font-family: 'Courier New', Courier, monospace; user-select: none; }
+    
+    #canvas-container { width: 100vw; height: 100vh; display: block; }
+
+    #ui-layer {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; display: flex; flex-direction: column; justify-content: space-between;
+    }
+
+    /* MC 风格 UI */
+    #chat-container {
+      pointer-events: auto;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 10px; margin: 20px; border: 2px solid #aaa;
+      width: 340px; display: flex; flex-direction: column;
+      image-rendering: pixelated;
+    }
+
+    #chat-log {
+      max-height: 180px;
+      overflow-y: auto;
+      font-size: 13px;
+      color: #EEEEEE;
+      margin-bottom: 6px;
+    }
+    #chat-log div {
+      margin: 2px 0;
+      word-break: break-word;
+    }
+
+    input[type="text"] {
+      width: 100%; padding: 8px; border: 2px solid #555;
+      margin-top: 5px; box-sizing: border-box;
+      background: #333; color: white; outline: none; font-family: inherit; font-weight: bold;
+    }
+    input[type="text"]:focus { border-color: #fff; background: #000; }
+
+    #controls-hint {
+      position: absolute; top: 20px; right: 20px;
+      background: rgba(0,0,0,0.6); color: #eee;
+      padding: 15px; border: 2px solid #aaa; text-align: right; pointer-events: none;
+      line-height: 1.6; font-size: 14px; font-weight: bold;
+    }
+
+    .key {
+      background: #bbb; color: #222; box-shadow: 0 2px 0 #555;
+      padding: 2px 6px; border-radius: 2px; font-weight: bold;
+      margin: 0 2px; display: inline-block;
+    }
+
+    #crosshair {
+      position: absolute; top: 50%; left: 50%; width: 18px; height: 18px; pointer-events: none;
+      transform: translate(-50%, -50%);
+    }
+    #crosshair::before, #crosshair::after {
+      content: ''; position: absolute; background: rgba(255,255,255,0.9); mix-blend-mode: difference;
+    }
+    #crosshair::before { top: 8px; left: 0; width: 18px; height: 2px; }
+    #crosshair::after { left: 8px; top: 0; width: 2px; height: 18px; }
+
+    #net-status { margin-top: 5px; font-size: 14px; color: #FFFF55; text-shadow: 2px 2px 0 #000; }
+
+    #hp-bar-bg { margin-top: 5px; width: 100%; height: 12px; background: #333; border: 2px solid #000; }
+    #hp-bar-fill { width: 100%; height: 100%; background: #ff3333; image-rendering: pixelated; }
+    #hp-text { font-size: 14px; color: white; margin-top: 2px; text-shadow: 2px 2px 0 #000; text-align: center; }
+    
+    #click-to-play {
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        color: #fff; font-size: 24px; font-weight: bold; text-shadow: 3px 3px 0 #000;
+        background: rgba(0,0,0,0.5); padding: 20px; border: 4px solid #fff;
+        pointer-events: none; text-align: center;
+    }
