@@ -110,8 +110,8 @@ Deno.serve({ port: PORT }, async (req) => {
     return json(getRecentKills(limit));
   }
   if (url.pathname.startsWith("/api/player/")) {
-    const playerId = url.pathname.slice("/api/player/".length);
-    const stats = getPlayerStats(playerId);
+    const playerName = decodeURIComponent(url.pathname.slice("/api/player/".length));
+    const stats = getPlayerStats(playerName);
     if (!stats) return json({ error: "Player not found" }, 404);
     return json(stats);
   }
