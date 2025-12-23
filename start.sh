@@ -55,5 +55,9 @@ fi
 echo "[start] using deno: ${DENO_CMD}"
 echo "[start] starting deno server..."
 
+# 设置 Deno 缓存目录（解决 SQLite FFI 加载问题）
+export DENO_DIR="${DENO_DIR:-${HOME}/.cache/deno}"
+mkdir -p "$DENO_DIR"
+
 # 你可以把 main.ts 改成你的入口文件名
 exec "$DENO_CMD" run -A --unstable-kv main.ts
