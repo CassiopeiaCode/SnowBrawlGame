@@ -4,7 +4,7 @@
 // GET  /health -> health
 
 import { CONFIG, PORT, WS_SECRET } from "./config.ts";
-import { CLIENT_HTML } from "./client_html.ts";
+import { CLIENT_HTML, CLIENT_HTML_SOURCE } from "./client_html.ts";
 import { json, text } from "./utils.ts";
 import { clients, events, lastSeenSeq, playersCache } from "./state.ts";
 import { handleWs } from "./ws.ts";
@@ -31,6 +31,7 @@ Deno.serve({ port: PORT }, async (req) => {
     return json({
       ok: true,
       world: CONFIG.WORLD,
+      clientHtmlSource: CLIENT_HTML_SOURCE,
       connectionsOnThisIsolate: clients.size,
       latestSeq: lastSeenSeq,
       playersCachedOnThisIsolate: playersCache.size,
