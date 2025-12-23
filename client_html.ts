@@ -52,7 +52,7 @@ async function buildDevHtml(): Promise<string> {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MC圣诞雪球大乱斗</title>
+  <title>圣诞雪球大乱斗</title>
   <style>
 ${style}
   </style>

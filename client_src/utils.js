@@ -1,5 +1,57 @@
-// 本次服务器启动时注入的简单 WS 加密秘钥（在浏览器看来是硬编码常量）
-      const WS_SECRET = "__WS_SECRET__";
+// AES-GCM 加密密钥（服务端注入）
+      const WS_AES_KEY_HEX = "__WS_AES_KEY__";
+
+      // AES-GCM 加密工具
+      let aesKey = null;
+
+      async function getAesKey() {
+        if (aesKey) return aesKey;
+        const keyBytes = new Uint8Array(32);
+        for (let i = 0; i < 32; i++) {
+          keyBytes[i] = parseInt(WS_AES_KEY_HEX.slice(i * 2, i * 2 + 2), 16);
+        }
+        aesKey = await crypto.subtle.importKey(
+          "raw",
+          keyBytes,
+          { name: "AES-GCM" },
+          false,
+          ["encrypt", "decrypt"]
+        );
+        return aesKey;
+      }
+
+      async function aesEncrypt(plaintext) {
+        const key = await getAesKey();
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const encoded = new TextEncoder().encode(plaintext);
+        const ciphertext = await crypto.subtle.encrypt(
+          { name: "AES-GCM", iv },
+          key,
+          encoded
+        );
+        const combined = new Uint8Array(iv.length + ciphertext.byteLength);
+        combined.set(iv, 0);
+        combined.set(new Uint8Array(ciphertext), iv.length);
+        return btoa(String.fromCharCode(...combined));
+      }
+
+      async function aesDecrypt(encrypted) {
+        try {
+          const key = await getAesKey();
+          const combined = Uint8Array.from(atob(encrypted), c => c.charCodeAt(0));
+          const iv = combined.slice(0, 12);
+          const ciphertext = combined.slice(12);
+          const decrypted = await crypto.subtle.decrypt(
+            { name: "AES-GCM", iv },
+            key,
+            ciphertext
+          );
+          return new TextDecoder().decode(decrypted);
+        } catch (e) {
+          console.error("[Client] AES decrypt failed:", e, "raw:", encrypted.slice(0, 100));
+          return null;
+        }
+      }
 
 	    // 简单 randomUUID 兼容实现：优先使用原生，其次使用 getRandomValues，最后退回 Math.random
 	    function randomId() {
@@ -156,13 +208,15 @@
       return;
     }
 
-    // WS 消息直接使用 JSON 明文（编码/解码包装在函数中，方便后续演进）
-    function wsEncode(obj) {
-      return JSON.stringify(obj);
+    // WS 消息使用 AES-GCM 加密
+    async function wsEncode(obj) {
+      return await aesEncrypt(JSON.stringify(obj));
     }
-    function wsDecode(str) {
+    async function wsDecode(str) {
       try {
-        return JSON.parse(str);
+        const decrypted = await aesDecrypt(str);
+        if (!decrypted) return null;
+        return JSON.parse(decrypted);
       } catch {
         return null;
       }

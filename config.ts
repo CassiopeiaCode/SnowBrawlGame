@@ -39,9 +39,6 @@ const seedBuf = new Uint32Array(1);
 crypto.getRandomValues(seedBuf);
 export const WORLD_SEED = seedBuf[0] >>> 0;
 
-// 每次服务器启动生成一个 WebSocket 简单加密秘钥，用于对 WS 载荷做轻量混淆
-const wsKeyBuf = new Uint8Array(16);
-crypto.getRandomValues(wsKeyBuf);
-export const WS_SECRET = Array.from(wsKeyBuf)
-  .map((b) => b.toString(16).padStart(2, "0"))
-  .join("");
+// 硬编码的 AES-GCM 加密密钥（32字节 = 256位），客户端和服务端共用
+// 注意：生产环境应该通过环境变量注入，这里为了演示直接硬编码
+export const WS_AES_KEY_HEX = "a1b2c3d4e5f6071829304050607080901a2b3c4d5e6f708192a3b4c5d6e7f809";

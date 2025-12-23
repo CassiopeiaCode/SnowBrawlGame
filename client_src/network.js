@@ -14,7 +14,7 @@ class NetworkManager {
         this.baseReconnectDelayMs = 1000;
       }
       sendRename(name) {
-        if (this.ws?.readyState === 1) this.ws.send(wsEncode({ t: "rename", name }));
+        if (this.ws?.readyState === 1) wsEncode({ t: "rename", name }).then(enc => this.ws.send(enc));
       }
       status(text, color) {
         const el = document.getElementById("net-status");
@@ -55,11 +55,13 @@ class NetworkManager {
             return;
           }
           this.lastPingSentAt = performance.now();
-          try {
-            this.ws.send(wsEncode({ t: "ping", now: Date.now() }));
-          } catch {
-            // ignore
-          }
+          wsEncode({ t: "ping", now: Date.now() }).then(enc => {
+            try {
+              if (this.ws?.readyState === 1) this.ws.send(enc);
+            } catch {
+              // ignore
+            }
+          });
           this.pingTimerId = setTimeout(tick, this.pingIntervalMs);
         };
         tick();
@@ -74,7 +76,7 @@ class NetworkManager {
           this.connected = true;
           this.connectAttempts = 0;
           this.status("🟢 已连接", "#55FF55");
-          ws.send(wsEncode({ t: "hello", name: this.playerName || playerName }));
+          wsEncode({ t: "hello", name: this.playerName || playerName }).then(enc => ws.send(enc));
           this.startPingLoop();
         };
         ws.onclose = () => {
@@ -85,8 +87,9 @@ class NetworkManager {
           }
           this.scheduleReconnect();
         };
-        ws.onmessage = (ev) => {
-	          let msg; try { msg = wsDecode(ev.data); } catch { return; }
+        ws.onmessage = async (ev) => {
+	          let msg; try { msg = await wsDecode(ev.data); } catch { return; }
+              if (!msg) return;
 	  
 	          if (msg.t === "welcome") {
             // 新连接 / 重连：如果已有本地玩家且 id 不同，清理旧的本地玩家
@@ -136,25 +139,29 @@ class NetworkManager {
         };
 
       }
-      sendChat(text) { if (this.ws?.readyState === 1) this.ws.send(wsEncode({ t: "chat", text })); }
+      sendChat(text) { if (this.ws?.readyState === 1) wsEncode({ t: "chat", text }).then(enc => this.ws.send(enc)); }
       maybeSendLocalState() {
         if (this.ws?.readyState !== 1 || !localPlayer) return;
         const now = performance.now();
         if (now - this.lastStateSend < (1000 / CONFIG.netSendHz)) return;
         this.lastStateSend = now;
         const { mesh, velocity } = localPlayer;
-        this.ws.send(wsEncode({
+        wsEncode({
           t: "state",
           pos: { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z },
           rotY: mesh.rotation.y,
           vel: { x: velocity.x, y: velocity.y, z: velocity.z },
           crouch: !!localPlayer.input.shift,
           pingMs: typeof this.lastPingMs === "number" ? this.lastPingMs : undefined,
-        }));
+        }).then(enc => {
+          if (this.ws?.readyState === 1) this.ws.send(enc);
+        });
       }
       sendSnowball(shotId, dir) {
         if (this.ws?.readyState === 1) {
-          this.ws.send(wsEncode({ t: "snowball", id: shotId, dir, ts: Date.now() }));
+          wsEncode({ t: "snowball", id: shotId, dir, ts: Date.now() }).then(enc => {
+            if (this.ws?.readyState === 1) this.ws.send(enc);
+          });
         }
       }
       applySnapshot(list) {

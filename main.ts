@@ -3,7 +3,7 @@
 // WS   /ws     -> WebSocket
 // GET  /health -> health
 
-import { CONFIG, PORT, WS_SECRET } from "./config.ts";
+import { CONFIG, PORT, WS_AES_KEY_HEX } from "./config.ts";
 import { CLIENT_HTML, CLIENT_HTML_SOURCE } from "./client_html.ts";
 import { json, text } from "./utils.ts";
 import { clients, events, lastSeenSeq, playersCache } from "./state.ts";
@@ -77,9 +77,8 @@ Deno.serve({ port: PORT }, async (req) => {
   }
 
   if (url.pathname === "/") {
-    // 在 HTML 模板中注入本次服务器启动时生成的 WS 加密秘钥，
-    // 在客户端看来是硬编码的常量，但每次重启都会变化。
-    const html = CLIENT_HTML.replace(/__WS_SECRET__/g, WS_SECRET);
+    // 在 HTML 模板中注入 AES 密钥
+    const html = CLIENT_HTML.replace(/__WS_AES_KEY__/g, WS_AES_KEY_HEX);
     return new Response(html, {
       headers: {
         "content-type": "text/html; charset=utf-8",

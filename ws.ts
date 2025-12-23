@@ -41,7 +41,7 @@ export async function handleWs(req: Request): Promise<Response> {
 
   socket.onmessage = async (evt) => {
     if (typeof evt.data !== "string") return;
-    const msg = decodeClientWsMsg(evt.data);
+    const msg = await decodeClientWsMsg(evt.data);
     if (!msg) return;
 
     const now = Date.now();

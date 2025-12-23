@@ -1,7 +1,61 @@
 // utils.ts - 公共工具函数
 
-import { CONFIG } from "./config.ts";
+import { CONFIG, WS_AES_KEY_HEX } from "./config.ts";
 import type { Vec3, ServerMsg, ClientMsg } from "./protocol.ts";
+
+// --- AES-GCM 加密工具 ---
+
+let aesKey: CryptoKey | null = null;
+
+async function getAesKey(): Promise<CryptoKey> {
+  if (aesKey) return aesKey;
+  const keyBytes = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) {
+    keyBytes[i] = parseInt(WS_AES_KEY_HEX.slice(i * 2, i * 2 + 2), 16);
+  }
+  aesKey = await crypto.subtle.importKey(
+    "raw",
+    keyBytes,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt", "decrypt"]
+  );
+  return aesKey;
+}
+
+export async function aesEncrypt(plaintext: string): Promise<string> {
+  const key = await getAesKey();
+  const iv = crypto.getRandomValues(new Uint8Array(12)); // 96-bit IV
+  const encoded = new TextEncoder().encode(plaintext);
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    encoded
+  );
+  // 格式: base64(iv + ciphertext)
+  const combined = new Uint8Array(iv.length + ciphertext.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(ciphertext), iv.length);
+  return btoa(String.fromCharCode(...combined));
+}
+
+export async function aesDecrypt(encrypted: string): Promise<string | null> {
+  try {
+    const key = await getAesKey();
+    const combined = Uint8Array.from(atob(encrypted), c => c.charCodeAt(0));
+    const iv = combined.slice(0, 12);
+    const ciphertext = combined.slice(12);
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      key,
+      ciphertext
+    );
+    return new TextDecoder().decode(decrypted);
+  } catch (e) {
+    console.error("[Server] AES decrypt failed:", e, "raw:", encrypted.slice(0, 100));
+    return null;
+  }
+}
 
 export function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -49,12 +103,15 @@ export function clampChat(textValue: string): string {
   return ((textValue ?? "").trim()).slice(0, CONFIG.MAX_CHAT);
 }
 
-export function wsSend(ws: WebSocket, msg: ServerMsg) {
-  ws.send(JSON.stringify(msg));
+export async function wsSend(ws: WebSocket, msg: ServerMsg) {
+  const encrypted = await aesEncrypt(JSON.stringify(msg));
+  ws.send(encrypted);
 }
 
-export function decodeClientWsMsg(s: string): ClientMsg | null {
-  return safeParse<ClientMsg>(s);
+export async function decodeClientWsMsg(s: string): Promise<ClientMsg | null> {
+  const decrypted = await aesDecrypt(s);
+  if (!decrypted) return null;
+  return safeParse<ClientMsg>(decrypted);
 }
 
 // 宽松校验（避免太严格导致兼容问题）

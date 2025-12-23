@@ -2,6 +2,7 @@
 
 import { CONFIG, TTL } from "./config.ts";
 import type { PlayerSnapshot, WorldEvent, ServerMsg, Vec3 } from "./protocol.ts";
+import { aesEncrypt } from "./utils.ts";
 
 // 事件序号（本 isolate 内自增）
 export let latestSeq = 0;
@@ -33,11 +34,11 @@ export type WSClient = {
 
 export const clients = new Map<string, WSClient>();
 
-export function broadcast(msg: ServerMsg) {
-  const data = JSON.stringify(msg);
+export async function broadcast(msg: ServerMsg) {
+  const encrypted = await aesEncrypt(JSON.stringify(msg));
   for (const c of clients.values()) {
     try {
-      c.ws.send(data);
+      c.ws.send(encrypted);
     } catch {
       // ignore
     }
@@ -115,7 +116,7 @@ export async function appendEventInMem(ev: any): Promise<WorldEvent> {
 
   applyEventToCache(full);
 
-  broadcast({ t: "event", ev: full });
+  await broadcast({ t: "event", ev: full });
 
   return full;
 }
@@ -137,12 +138,12 @@ setInterval(() => {
 // backpressure：慢客户端丢“状态/快照帧”，不要让它排队
 const DROP_BUFFER_BYTES = 256_000; // 256KB，可按需调大/调小
 
-export function broadcastDroppable(msg: any) {
-  const data = JSON.stringify(msg);
+export async function broadcastDroppable(msg: any) {
+  const encrypted = await aesEncrypt(JSON.stringify(msg));
   for (const c of clients.values()) {
     try {
       if ((c.ws as any).bufferedAmount != null && (c.ws as any).bufferedAmount > DROP_BUFFER_BYTES) continue;
-      c.ws.send(data);
+      c.ws.send(encrypted);
     } catch {
       // ignore
     }
@@ -200,7 +201,7 @@ export function startStateSyncOnce() {
 
       try {
         const players = Array.from(playersCache.values());
-        broadcastDroppable({ t: "snapshot", world: CONFIG.WORLD, players, latestSeq: lastSeenSeq });
+        await broadcastDroppable({ t: "snapshot", world: CONFIG.WORLD, players, latestSeq: lastSeenSeq });
       } catch {
         // ignore
       }
@@ -227,7 +228,7 @@ export function startStateTickOnce() {
       const list = Array.from(pendingStates.values());
       pendingStates.clear();
 
-      broadcastDroppable({ t: "states", at: Date.now(), list });
+      await broadcastDroppable({ t: "states", at: Date.now(), list });
     }
   })();
 }
