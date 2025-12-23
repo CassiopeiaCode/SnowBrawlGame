@@ -313,10 +313,14 @@ class NetworkManager {
           const victim = playersById.get(ev.victimId);
           if (victim) {
             victim.dead = true;
-            // 本地玩家死亡：显示“你死了”遮罩
+            // 本地玩家死亡：显示"你死了"遮罩
             if (victim.id === localPlayerId) setDeadUI(true);
             // 远程玩家死亡：不再隐藏 mesh，让他们以倒地姿态留在场景中
           }
+          // 显示击杀信息到聊天
+          const attackerName = ev.attackerName || "???";
+          const victimName = ev.victimName || "???";
+          appendChatLog("💀 " + attackerName + " 击杀了 " + victimName);
         }
         break;
       case "respawn":

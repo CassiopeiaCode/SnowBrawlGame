@@ -236,9 +236,10 @@ export async function serverHandleSnowball(clientId: string, msg: ClientSnowball
   if (newHp === 0) {
     // 记录击杀到数据库
     const attacker = playersCache.get(clientId);
+    const attackerName = attacker?.name || "Unknown";
     recordKill({
       attackerId: clientId,
-      attackerName: attacker?.name || "Unknown",
+      attackerName,
       victimId: victim.id,
       victimName: victim.name,
       shotId,
@@ -247,7 +248,9 @@ export async function serverHandleSnowball(clientId: string, msg: ClientSnowball
     await appendEventInMem({
       t: "death",
       victimId: victim.id,
+      victimName: victim.name,
       attackerId: clientId,
+      attackerName,
       shotId,
       respawnAt,
     });

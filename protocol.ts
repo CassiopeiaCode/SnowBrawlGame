@@ -64,7 +64,9 @@ export type WorldEvent =
       seq: number;
       at: number;
       victimId: string;
+      victimName: string;
       attackerId: string;
+      attackerName: string;
       shotId: string;
       respawnAt: number;
     }
