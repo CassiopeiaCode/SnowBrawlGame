@@ -14,6 +14,7 @@ import {
   vec3Normalize,
 } from "./utils.ts";
 import { appendEventInMem, enqueuePendingState, playersCache } from "./state.ts";
+import { recordKill } from "./storage.ts";
 
 // shotId 去重（避免网络重发导致重复命中/重复扣血）
 const seenShots = new Map<string, number>(); // shotId -> expireAt
@@ -233,6 +234,16 @@ export async function serverHandleSnowball(clientId: string, msg: ClientSnowball
   });
 
   if (newHp === 0) {
+    // 记录击杀到数据库
+    const attacker = playersCache.get(clientId);
+    recordKill({
+      attackerId: clientId,
+      attackerName: attacker?.name || "Unknown",
+      victimId: victim.id,
+      victimName: victim.name,
+      shotId,
+    });
+
     await appendEventInMem({
       t: "death",
       victimId: victim.id,

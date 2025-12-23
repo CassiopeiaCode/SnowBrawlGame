@@ -7,15 +7,99 @@
   <div style="font-size: 24px; margin-top: 10px;">重生倒计时...</div>
 </div>
 
+<!-- 登录界面 -->
+<div id="login-overlay" style="
+  position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+  background:linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  z-index:10000; flex-direction:row; gap:60px;
+">
+  <!-- 左侧：登录区域 -->
+  <div style="text-align:center; color:white;">
+    <h1 style="font-size:48px; margin-bottom:10px; text-shadow:3px 3px 0 #000;">🎄 雪球大战</h1>
+    <p style="font-size:18px; color:#aaa; margin-bottom:30px;">SnowBrawl - 多人在线雪球对战</p>
+    
+    <div id="login-buttons" style="display:flex; flex-direction:column; gap:15px; align-items:center;">
+      <!-- OAuth 登录按钮 -->
+      <a id="oauth-login-btn" href="/auth/login" style="
+        display:none; padding:15px 40px; font-size:18px; 
+        background:linear-gradient(135deg, #4CAF50, #45a049); color:white;
+        border:none; border-radius:8px; cursor:pointer;
+        text-decoration:none; font-weight:bold;
+        box-shadow:0 4px 15px rgba(76,175,80,0.4);
+        transition:transform 0.2s, box-shadow 0.2s;
+      " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+        🔐 使用 Linux.do 登录
+      </a>
+      
+      <!-- 游客登录 -->
+      <div id="guest-login" style="display:none;">
+        <input type="text" id="guest-name-input" placeholder="输入昵称" maxlength="12" style="
+          padding:12px 20px; font-size:16px; border:2px solid #444;
+          border-radius:8px; background:#2a2a4a; color:white;
+          width:200px; text-align:center; margin-bottom:10px;
+        " />
+        <br>
+        <button id="guest-play-btn" style="
+          padding:12px 30px; font-size:16px;
+          background:linear-gradient(135deg, #666, #555); color:white;
+          border:none; border-radius:8px; cursor:pointer;
+          transition:transform 0.2s;
+        " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+          🎮 游客模式
+        </button>
+      </div>
+    </div>
+    
+    <!-- 已登录用户信息 -->
+    <div id="logged-in-info" style="display:none;">
+      <p style="font-size:20px; margin-bottom:20px;">
+        欢迎回来, <span id="logged-in-name" style="color:#4CAF50; font-weight:bold;"></span>!
+      </p>
+      <button id="start-game-btn" style="
+        padding:15px 50px; font-size:20px;
+        background:linear-gradient(135deg, #4CAF50, #45a049); color:white;
+        border:none; border-radius:8px; cursor:pointer;
+        box-shadow:0 4px 15px rgba(76,175,80,0.4);
+        transition:transform 0.2s;
+      " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+        🎮 开始游戏
+      </button>
+      <br><br>
+      <a href="/auth/logout" style="color:#888; font-size:14px;">退出登录</a>
+    </div>
+    
+    <p id="login-status" style="color:#888; margin-top:20px; font-size:14px;">正在检查登录状态...</p>
+  </div>
+
+  <!-- 右侧：排行榜 -->
+  <div style="display:flex; gap:30px;">
+    <!-- 24小时排行 -->
+    <div style="background:rgba(0,0,0,0.3); border-radius:12px; padding:20px; min-width:200px;">
+      <h3 style="color:#FFD700; margin:0 0 15px 0; font-size:16px; text-align:center;">⏰ 24小时排行</h3>
+      <div id="leaderboard-24h" style="color:#ddd; font-size:14px;">
+        <div style="color:#888; text-align:center;">加载中...</div>
+      </div>
+    </div>
+    
+    <!-- 7天排行 -->
+    <div style="background:rgba(0,0,0,0.3); border-radius:12px; padding:20px; min-width:200px;">
+      <h3 style="color:#FFD700; margin:0 0 15px 0; font-size:16px; text-align:center;">📅 7天排行</h3>
+      <div id="leaderboard-7d" style="color:#ddd; font-size:14px;">
+        <div style="color:#888; text-align:center;">加载中...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
   <div id="canvas-container"></div>
   <div id="crosshair"></div>
-  <div id="click-to-play">点击屏幕<br>加入雪球大战</div>
+  <div id="click-to-play">点击屏幕<br>开始游戏</div>
 
   <div id="ui-layer">
     <div id="chat-container">
       <div style="color: #55FF55; font-weight:bold; font-size: 16px; margin-bottom: 4px; text-shadow: 2px 2px 0 #000;">🎄 圣诞服</div>
       <div id="chat-log"></div>
-      <input type="text" id="name-input" placeholder="输入昵称" maxlength="12" />
+      <div id="player-name-display" style="color:#4CAF50; font-weight:bold; margin-bottom:4px; display:none;"></div>
       <input type="text" id="chat-input" placeholder="按 T 或回车聊天" maxlength="80" />
       <div id="net-status">🔴 未连接</div>
       <div id="hp-bar-bg"><div id="hp-bar-fill"></div></div>

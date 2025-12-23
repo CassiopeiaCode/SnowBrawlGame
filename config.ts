@@ -10,6 +10,7 @@ export const CONFIG = {
   CLEANUP_IDLE_MS: 60_000,
   CLEANUP_SCAN_MS: 10_000,
   MAP_HALF: 95, // 地图半径（玩家活动区域）与前端保持一致
+  ALLOW_DUPLICATE_NAMES: true, // 是否允许同名玩家多重登录
 
   GAME: {
     gravity: 20,
@@ -41,4 +42,4 @@ export const WORLD_SEED = seedBuf[0] >>> 0;
 
 // 硬编码的 AES-GCM 加密密钥（32字节 = 256位），客户端和服务端共用
 // 注意：生产环境应该通过环境变量注入，这里为了演示直接硬编码
-export const WS_AES_KEY_HEX = "a1b2c3d4e5f6071829304050607080901a2b3c4d5e6f708192a3b4c5d6e7f809";
+export const WS_AES_KEY_HEX = "85237b044148ccbcb10a383765ae7359bb1ef8ca816674e2080d76a5f70338bb";

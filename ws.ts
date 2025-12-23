@@ -51,6 +51,20 @@ export async function handleWs(req: Request): Promise<Response> {
 
       clearTimeout(helloTimer);
 
+      // 检查是否允许同名玩家
+      if (!CONFIG.ALLOW_DUPLICATE_NAMES) {
+        const existingClient = Array.from(clients.values()).find(c => c.name === msg.name);
+        if (existingClient) {
+          await wsSend(socket, { t: "error", message: "该用户名已在线，请使用其他名称或稍后再试" });
+          try {
+            socket.close(4001, "duplicate name");
+          } catch {
+            // ignore
+          }
+          return;
+        }
+      }
+
       const snap = await serverOnHello(msg.name);
 
       client = {

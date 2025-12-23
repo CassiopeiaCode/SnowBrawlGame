@@ -2,12 +2,15 @@
 // GET  /       -> 客户端（Three.js 联机版）
 // WS   /ws     -> WebSocket
 // GET  /health -> health
+// GET  /auth/* -> OAuth 认证
 
 import { CONFIG, PORT, WS_AES_KEY_HEX } from "./config.ts";
 import { CLIENT_HTML, CLIENT_HTML_SOURCE } from "./client_html.ts";
 import { json, text } from "./utils.ts";
 import { clients, events, lastSeenSeq, playersCache } from "./state.ts";
 import { handleWs } from "./ws.ts";
+import { handleLogin, handleCallback, handleLogout, handleMe, isOAuthConfigured } from "./auth.ts";
+import { getLeaderboard, getRecentKills, getPlayerStats, getLeaderboardByTime } from "./storage.ts";
 
 // 简单的静态资源 MIME 类型映射，用于 /assets 下的文件
 function guessContentType(path: string): string {
@@ -74,6 +77,43 @@ Deno.serve({ port: PORT }, async (req) => {
     } catch {
       return text("Not Found", 404);
     }
+  }
+
+  // OAuth 认证路由
+  if (url.pathname === "/auth/login") {
+    return handleLogin(req);
+  }
+  if (url.pathname === "/auth/callback") {
+    return await handleCallback(req);
+  }
+  if (url.pathname === "/auth/logout") {
+    return handleLogout(req);
+  }
+  if (url.pathname === "/auth/me") {
+    return await handleMe(req);
+  }
+  if (url.pathname === "/auth/config") {
+    return json({ oauth_enabled: isOAuthConfigured() });
+  }
+
+  // 统计 API
+  if (url.pathname === "/api/leaderboard") {
+    const limit = Number(url.searchParams.get("limit")) || 20;
+    const hours = url.searchParams.get("hours");
+    if (hours) {
+      return json(getLeaderboardByTime(Number(hours), limit));
+    }
+    return json(getLeaderboard(limit));
+  }
+  if (url.pathname === "/api/kills") {
+    const limit = Number(url.searchParams.get("limit")) || 50;
+    return json(getRecentKills(limit));
+  }
+  if (url.pathname.startsWith("/api/player/")) {
+    const playerId = url.pathname.slice("/api/player/".length);
+    const stats = getPlayerStats(playerId);
+    if (!stats) return json({ error: "Player not found" }, 404);
+    return json(stats);
   }
 
   if (url.pathname === "/") {
