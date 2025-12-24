@@ -26,7 +26,7 @@
         return;
       }
 
-      const medals = ["🥇", "🥈", "🥉"];
+      const medals = ["1.", "2.", "3."];
       el.innerHTML = data.map((p, i) => {
         const medal = medals[i] || `${i + 1}.`;
         const rawName = p.playerName || "Unknown";
