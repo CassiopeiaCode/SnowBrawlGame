@@ -218,6 +218,177 @@ function placeKenneyModel(url, pos, rotY, scale) {
   );
 }
 
+// 创建圣诞树（地图中心地标）
+function createChristmasTree() {
+  const treeGroup = new THREE.Group();
+  const rng = makeRng(worldSeed + 12345); // 使用固定种子让圣诞树每次一致
+  
+  // 材质
+  const leafMaterial = new THREE.MeshStandardMaterial({
+    color: 0x0a4d15,
+    roughness: 0.7,
+    metalness: 0.1,
+    flatShading: true
+  });
+  
+  const trunkMaterial = new THREE.MeshStandardMaterial({
+    color: 0x3e2723,
+    roughness: 1.0
+  });
+  
+  // 装饰球材质
+  const ornamentMaterials = [
+    new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.1, metalness: 0.4 }),
+    new THREE.MeshStandardMaterial({ color: 0xffd700, roughness: 0.1, metalness: 0.8 }),
+    new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.1, metalness: 0.5 }),
+    new THREE.MeshStandardMaterial({ color: 0x2266ff, roughness: 0.1, metalness: 0.5 })
+  ];
+  
+  // 1. 树干
+  const trunkGeo = new THREE.CylinderGeometry(1.2, 1.8, 6, 8);
+  const trunk = new THREE.Mesh(trunkGeo, trunkMaterial);
+  trunk.position.y = 3;
+  trunk.castShadow = true;
+  trunk.receiveShadow = true;
+  treeGroup.add(trunk);
+  
+  // 2. 树叶层级（优化版，减少复杂度）
+  const layers = [
+    { y: 5.5, r: 6.0, h: 5.0 },
+    { y: 8.0, r: 5.2, h: 4.5 },
+    { y: 10.5, r: 4.2, h: 4.0 },
+    { y: 12.8, r: 3.2, h: 3.5 },
+    { y: 14.8, r: 2.2, h: 3.0 },
+    { y: 16.5, r: 1.2, h: 2.5 }
+  ];
+  
+  const christmasLights = []; // 存储彩灯用于动画
+  
+  layers.forEach((layer, tierIndex) => {
+    // 创建圆锥形树叶
+    const geometry = new THREE.ConeGeometry(layer.r, layer.h, 16, 2);
+    const positions = geometry.attributes.position;
+    
+    // 轻微扭曲让树更自然
+    for (let i = 0; i < positions.count; i++) {
+      const x = positions.getX(i);
+      const yPos = positions.getY(i);
+      const z = positions.getZ(i);
+      
+      if (yPos < layer.h / 2 - 0.1) {
+        positions.setX(i, x + (rng() - 0.5) * 0.3);
+        positions.setY(i, yPos + (rng() - 0.5) * 0.2);
+        positions.setZ(i, z + (rng() - 0.5) * 0.3);
+      }
+    }
+    geometry.computeVertexNormals();
+    
+    const mesh = new THREE.Mesh(geometry, leafMaterial);
+    mesh.position.y = layer.y;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    treeGroup.add(mesh);
+    
+    // 添加装饰（优化数量）
+    const decorCount = Math.floor(layer.r * 4);
+    for (let i = 0; i < decorCount; i++) {
+      const angle = (i / decorCount) * Math.PI * 2 + (tierIndex * 1.5);
+      const ratio = 0.3 + rng() * 0.5;
+      const currentRadius = layer.r * ratio * 0.85;
+      const actualY = layer.y - (layer.h / 2) + (layer.h * (1 - ratio));
+      
+      const x = Math.cos(angle) * currentRadius;
+      const z = Math.sin(angle) * currentRadius;
+      
+      if (rng() > 0.5) {
+        // 装饰球
+        const size = 0.25 + rng() * 0.15;
+        const mat = ornamentMaterials[Math.floor(rng() * ornamentMaterials.length)];
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(size, 8, 8), mat);
+        ball.position.set(x, actualY - 0.2, z);
+        ball.castShadow = true;
+        treeGroup.add(ball);
+      } else {
+        // 彩灯
+        const hue = rng();
+        const colorVal = new THREE.Color().setHSL(hue, 1, 0.5);
+        const bulbGeo = new THREE.SphereGeometry(0.12, 6, 6);
+        const bulbMat = new THREE.MeshStandardMaterial({
+          color: colorVal,
+          emissive: colorVal,
+          emissiveIntensity: 0.8,
+          roughness: 0.1
+        });
+        const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+        bulb.position.set(x, actualY, z);
+        treeGroup.add(bulb);
+        
+        christmasLights.push({
+          mesh: bulb,
+          baseColor: colorVal,
+          speed: 0.8 + rng() * 1.2,
+          phase: rng() * Math.PI * 2
+        });
+      }
+    }
+  });
+  
+  // 3. 星星（简化版）
+  const starGroup = new THREE.Group();
+  starGroup.position.set(0, 18.2, 0);
+  
+  // 创建星星形状
+  const starShape = new THREE.Shape();
+  const pts = 5;
+  for (let i = 0; i < pts * 2; i++) {
+    const r = (i % 2 === 0) ? 1.0 : 0.4;
+    const a = (i / (pts * 2)) * Math.PI * 2;
+    if (i === 0) starShape.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    else starShape.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  starShape.closePath();
+  
+  const starGeo = new THREE.ExtrudeGeometry(starShape, {
+    depth: 0.2,
+    bevelEnabled: true,
+    bevelThickness: 0.05,
+    bevelSize: 0.05,
+    bevelSegments: 1
+  });
+  
+  const starMat = new THREE.MeshStandardMaterial({
+    color: 0xffd700,
+    emissive: 0xffaa00,
+    emissiveIntensity: 0.8,
+    metalness: 0.8,
+    roughness: 0.2
+  });
+  
+  const starMesh = new THREE.Mesh(starGeo, starMat);
+  starGroup.add(starMesh);
+  
+  // 星星光源
+  const starLight = new THREE.PointLight(0xffaa00, 1.0, 12);
+  starGroup.add(starLight);
+  
+  treeGroup.add(starGroup);
+  
+  // 放置在地图中心
+  const centerY = terrainHeight(0, 0);
+  treeGroup.position.set(0, centerY, 0);
+  scene.add(treeGroup);
+  
+  // 添加碰撞体积（圆柱形）
+  const treeCollisionBox = new THREE.Box3(
+    new THREE.Vector3(-3, centerY, -3),
+    new THREE.Vector3(3, centerY + 18, 3)
+  );
+  STATIC_OBSTACLES.push(treeCollisionBox);
+  
+  // 返回动画数据
+  return { treeGroup, starGroup, starMesh, christmasLights };
+}
+
 function createEnvironment() {
   const rng = makeRng(worldSeed);
   const groundSize = 200;
@@ -279,6 +450,14 @@ function createEnvironment() {
   const snowMat = new THREE.PointsMaterial({ color: 0xFFFFFF, size: 0.3, transparent: true, opacity: 0.8 });
   const snowPoints = new THREE.Points(snowGeo, snowMat);
   scene.add(snowPoints);
+  
+  // 创建圣诞树（地图中心地标）
+  const christmasTree = createChristmasTree();
+  
+  // 将圣诞树动画数据存储到全局，供 animate 循环使用
+  if (typeof window !== 'undefined') {
+    window.christmasTreeAnim = christmasTree;
+  }
 
   (function scatterKenneyModels() {
     const baseUrl = "/assets/kenney_holiday_kit/Models/GLB format/";
@@ -307,7 +486,7 @@ function createEnvironment() {
           const h8 = terrainHeight(x - flatSampleOffset, z - flatSampleOffset);
           const hMin = Math.min(y, h1, h2, h3, h4, h5, h6, h7, h8);
           const hMax = Math.max(y, h1, h2, h3, h4, h5, h6, h7, h8);
-          const isNearCenter = Math.abs(x) < 8 && Math.abs(z) < 8;
+          const isNearCenter = Math.abs(x) < 12 && Math.abs(z) < 12; // 扩大中心禁区，避免与圣诞树重叠
           const tooSteep = (hMax - hMin) > maxSlopeDelta;
           if (!isNearCenter && !tooSteep) break;
         } while (attempts < 25);

@@ -253,6 +253,8 @@
       function animate() {
           requestAnimationFrame(animate);
           const dt = Math.min(clock.getDelta(), 0.1);
+          const time = clock.getElapsedTime();
+          
           players.forEach(p => p.update(dt));
           for (let i = snowballs.length - 1; i >= 0; i--) {
               snowballs[i].update(dt); if (!snowballs[i].active) snowballs.splice(i, 1);
@@ -293,6 +295,32 @@
                   if(positions[i] < 0) positions[i] = 50; 
               }
               snowSystem.geometry.attributes.position.needsUpdate = true;
+          }
+          
+          // 圣诞树动画
+          if (window.christmasTreeAnim) {
+              const tree = window.christmasTreeAnim;
+              
+              // 树木微动（模拟风）
+              if (tree.treeGroup) {
+                  tree.treeGroup.rotation.y = Math.sin(time * 0.2) * 0.05;
+              }
+              
+              // 星星旋转和呼吸
+              if (tree.starMesh) {
+                  tree.starMesh.rotation.y = time * 0.8;
+                  tree.starMesh.rotation.z = Math.sin(time) * 0.1;
+              }
+              
+              // 彩灯闪烁
+              if (tree.christmasLights) {
+                  tree.christmasLights.forEach(light => {
+                      const intensity = 0.5 + Math.sin(time * light.speed * 4 + light.phase) * 0.5;
+                      light.mesh.material.emissiveIntensity = intensity * 2;
+                      const scale = 1 + intensity * 0.15;
+                      light.mesh.scale.setScalar(scale);
+                  });
+              }
           }
 
           renderer.render(scene, camera);

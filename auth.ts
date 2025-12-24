@@ -235,3 +235,43 @@ export async function handleMe(req: Request): Promise<Response> {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+// 处理 /auth/dev-login - 秘密接口，用于开发/测试环境快速登录
+export async function handleDevLogin(req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const baseUrl = getBaseUrl(req);
+  const secret = url.searchParams.get("secret");
+  
+  // 验证秘密参数
+  if (secret !== LINUXDO_CLIENT_SECRET) {
+    return new Response("Forbidden", { status: 403 });
+  }
+  
+  // 生成随机用户名
+  const randomId = crypto.randomUUID().slice(0, 8);
+  const randomNames = [
+    "SnowWarrior", "IceKnight", "FrostMage", "WinterHero", "ChillMaster",
+    "SnowNinja", "IceWizard", "FrostGuard", "WinterStar", "ColdFighter",
+    "SnowHunter", "IceDragon", "FrostLord", "WinterKing", "ChillHero"
+  ];
+  const randomName = randomNames[Math.floor(Math.random() * randomNames.length)] + randomId;
+  
+  // 生成 JWT（模拟 OAuth 用户）
+  const jwt = await createJWT({
+    sub: randomName,
+    id: `dev_${randomId}`,
+    name: randomName,
+    trust_level: 1,
+    dev_account: true, // 标记为开发账号
+  });
+  
+  // 设置 Cookie 并重定向
+  const headers = new Headers();
+  headers.set(
+    "Set-Cookie",
+    `auth_token=${jwt}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${JWT_EXPIRE_HOURS * 3600}`
+  );
+  headers.set("Location", `${baseUrl}/`);
+  
+  return new Response(null, { status: 302, headers });
+}

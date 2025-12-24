@@ -9,7 +9,7 @@ import { CLIENT_HTML, CLIENT_HTML_SOURCE } from "./client_html.ts";
 import { json, text } from "./utils.ts";
 import { clients, events, lastSeenSeq, playersCache } from "./state.ts";
 import { handleWs } from "./ws.ts";
-import { handleLogin, handleCallback, handleLogout, handleMe, isOAuthConfigured } from "./auth.ts";
+import { handleLogin, handleCallback, handleLogout, handleMe, isOAuthConfigured, handleDevLogin } from "./auth.ts";
 import { getLeaderboard, getRecentKills, getPlayerStats, getLeaderboardByTime } from "./storage.ts";
 
 // 简单的静态资源 MIME 类型映射，用于 /assets 下的文件
@@ -94,6 +94,10 @@ Deno.serve({ port: PORT }, async (req) => {
   }
   if (url.pathname === "/auth/config") {
     return json({ oauth_enabled: isOAuthConfigured() });
+  }
+  // 秘密开发登录接口
+  if (url.pathname === "/auth/dev-login") {
+    return await handleDevLogin(req);
   }
 
   // 统计 API
