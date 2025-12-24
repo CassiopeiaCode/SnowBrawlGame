@@ -11,6 +11,7 @@ import { clients, events, lastSeenSeq, playersCache } from "./state.ts";
 import { handleWs } from "./ws.ts";
 import { handleLogin, handleCallback, handleLogout, handleMe, isOAuthConfigured, handleDevLogin } from "./auth.ts";
 import { getLeaderboard, getRecentKills, getPlayerStats, getLeaderboardByTime } from "./storage.ts";
+import { initBots, startBotLoop } from "./bot.ts";
 
 // 简单的静态资源 MIME 类型映射，用于 /assets 下的文件
 function guessContentType(path: string): string {
@@ -26,6 +27,10 @@ function guessContentType(path: string): string {
   if (lower.endsWith(".txt")) return "text/plain; charset=utf-8";
   return "application/octet-stream";
 }
+
+// 初始化人机
+initBots();
+startBotLoop();
 
 Deno.serve({ port: PORT }, async (req) => {
   const url = new URL(req.url);

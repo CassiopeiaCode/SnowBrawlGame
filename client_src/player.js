@@ -8,6 +8,7 @@ class PlayerModel {
     this.dead = false;
     this.health = 100;
     this.lastShotAt = 0;
+    this.isBot = id.startsWith("bot-"); // 判断是否为人机
 
     this.velocity = new THREE.Vector3();
     this.onGround = false;
@@ -37,6 +38,25 @@ class PlayerModel {
     this.mesh = new THREE.Group();
     const initialY = isRemote ? pos.y : terrainHeight(pos.x, pos.z);
     this.mesh.position.set(pos.x, initialY, pos.z);
+
+    // 如果是人机，加载雪人模型
+    if (this.isBot) {
+      this.loadSnowmanModel();
+      // 创建名字标签
+      this.nameSprite = this.createTextSprite(this.displayName(), 24, false);
+      this.nameSprite.position.y = 3.5; // 雪人更高，标签位置调整
+      this.mesh.add(this.nameSprite);
+
+      this.chatSprite = this.createTextSprite("", 20, true);
+      this.chatSprite.visible = false;
+      this.chatSprite.position.y = 4.0;
+      this.mesh.add(this.chatSprite);
+
+      this.walkTime = 0;
+      this.attackTime = 0;
+      scene.add(this.mesh);
+      return; // 人机不需要创建方块人模型
+    }
 
     this.bodyGroup = new THREE.Group();
     this.bodyGroup.position.y = 0.75;
@@ -137,6 +157,43 @@ class PlayerModel {
     scene.add(this.mesh);
   }
 
+  // 加载雪人模型
+  loadSnowmanModel() {
+    const loader = new THREE.GLTFLoader();
+    const baseUrl = "/assets/kenney_holiday_kit/Models/GLB format/";
+    
+    // 随机选择雪人模型（有帽子或无帽子）
+    const modelName = Math.random() > 0.5 ? "snowman-hat.glb" : "snowman.glb";
+    
+    loader.load(
+      baseUrl + modelName,
+      (gltf) => {
+        this.snowmanModel = gltf.scene;
+        this.snowmanModel.scale.set(2, 2, 2); // 放大雪人
+        this.snowmanModel.position.y = 0;
+        
+        this.snowmanModel.traverse((obj) => {
+          if (obj.isMesh) {
+            obj.castShadow = true;
+            obj.receiveShadow = true;
+            // 保存原始材质用于受伤闪烁效果
+            if (!this.originalMaterials) {
+              this.originalMaterials = [];
+            }
+            this.originalMaterials.push({
+              mesh: obj,
+              material: obj.material.clone()
+            });
+          }
+        });
+        
+        this.mesh.add(this.snowmanModel);
+      },
+      undefined,
+      (err) => console.warn("Failed to load snowman model", err)
+    );
+  }
+
   destroy() {
     if (this.mesh) this.scene.remove(this.mesh);
   }
@@ -157,7 +214,8 @@ class PlayerModel {
     this.name = name;
     this.mesh.remove(this.nameSprite);
     this.nameSprite = this.createTextSprite(this.displayName(), 24, false);
-    this.nameSprite.position.y = 2.4;
+    // 人机雪人模型更高，标签位置需要调整
+    this.nameSprite.position.y = this.isBot ? 3.5 : 2.4;
     this.mesh.add(this.nameSprite);
   }
 
@@ -165,7 +223,8 @@ class PlayerModel {
     this.pingMs = pingMs;
     this.mesh.remove(this.nameSprite);
     this.nameSprite = this.createTextSprite(this.displayName(), 24, false);
-    this.nameSprite.position.y = 2.4;
+    // 人机雪人模型更高，标签位置需要调整
+    this.nameSprite.position.y = this.isBot ? 3.5 : 2.4;
     this.mesh.add(this.nameSprite);
   }
 
@@ -271,6 +330,9 @@ class PlayerModel {
       this.velocity.lerp(this.targetVel, k);
       this.isCrouching = this.targetCrouch;
     } else {
+      // 本地玩家控制逻辑（人机不会走这里）
+      if (this.isBot) return; // 人机不需要本地控制
+      
       let speed = CONFIG.moveSpeed;
       this.isCrouching = this.input.shift;
       if (this.isCrouching) speed = CONFIG.crouchSpeed;
@@ -319,19 +381,51 @@ class PlayerModel {
       }
     }
 
-    this.updateAnimation(dt);
+    // 人机不需要动画更新
+    if (!this.isBot) {
+      this.updateAnimation(dt);
+    }
 
     if (this.hitFlashTime > 0) {
       this.hitFlashTime -= dt;
-      const t = Math.max(this.hitFlashTime / 0.25, 0);
-      const flashColor = 0xFF4444;
-      this.skinMat.color.setHex(flashColor);
-      this.shirtMat.color.setHex(flashColor);
-      this.pantsMat.color.setHex(flashColor);
+      
+      if (this.isBot) {
+        // 人机雪人模型的闪烁效果 
+        if (this.snowmanModel && this.originalMaterials) {
+          const flashIntensity = Math.max(this.hitFlashTime / 0.25, 0);
+          this.snowmanModel.traverse((obj) => {
+            if (obj.isMesh && obj.material) {
+              // 设置红色发光效果
+              obj.material.emissive = new THREE.Color(0xFF0000);
+              obj.material.emissiveIntensity = flashIntensity * 0.5;
+            }
+          });
+        }
+      } else {
+        // 普通玩家的闪烁效果
+        const t = Math.max(this.hitFlashTime / 0.25, 0);
+        const flashColor = 0xFF4444;
+        this.skinMat.color.setHex(flashColor);
+        this.shirtMat.color.setHex(flashColor);
+        this.pantsMat.color.setHex(flashColor);
+      }
     } else {
-      this.skinMat.color.setHex(this.baseColors.skin);
-      this.shirtMat.color.setHex(this.baseColors.shirt);
-      this.pantsMat.color.setHex(this.baseColors.pants);
+      if (this.isBot) {
+        // 恢复人机雪人模型的原始材质
+        if (this.snowmanModel && this.originalMaterials) {
+          this.originalMaterials.forEach(item => {
+            if (item.mesh.material) {
+              item.mesh.material.emissive = new THREE.Color(0x000000);
+              item.mesh.material.emissiveIntensity = 0;
+            }
+          });
+        }
+      } else {
+        // 恢复普通玩家的原始颜色
+        this.skinMat.color.setHex(this.baseColors.skin);
+        this.shirtMat.color.setHex(this.baseColors.shirt);
+        this.pantsMat.color.setHex(this.baseColors.pants);
+      }
     }
   }
 
