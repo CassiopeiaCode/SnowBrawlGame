@@ -33,8 +33,8 @@ export type Bot = {
 };
 
 const bots = new Map<string, Bot>();
-const BOT_COUNT = 3;
-const BOT_NAMES = ["雪人Bot-1", "雪人Bot-2", "雪人Bot-3"];
+const BOT_COUNT = 5;
+const BOT_NAMES = ["雪人Bot-1", "雪人Bot-2", "雪人Bot-3", "雪人Bot-4", "雪人Bot-5"];
 const SHOT_INTERVAL = 10000; // 10秒射击一次
 const MOVE_INTERVAL = 3000; // 3秒换一次目标位置
 const BOT_SPEED = 3.0;
@@ -109,22 +109,52 @@ function getRandomSpawnPos(): Vec3 {
   return { x, y, z };
 }
 
-// 获取随机移动目标（避开圣诞树）
+// 获取随机移动目标（避开圣诞树，防止跑出地图）
 function getRandomMoveTarget(currentPos: Vec3): Vec3 {
   let x: number, z: number, y: number;
   let attempts = 0;
   
+  const half = CONFIG.MAP_HALF;
+  const safeZone = half - 40; // 安全区域边界（距离边缘40单位）
+  
+  // 检查当前位置是否在安全区域外
+  const isOutsideSafeZone = Math.abs(currentPos.x) > safeZone || Math.abs(currentPos.z) > safeZone;
+  
+  // 如果在危险区域，强制往地图中心移动
+  if (isOutsideSafeZone) {
+    const angleToCenter = Math.atan2(-currentPos.z, -currentPos.x);
+    const distance = 40 + Math.random() * 30; // 移动更远的距离
+    x = currentPos.x + Math.cos(angleToCenter) * distance;
+    z = currentPos.z + Math.sin(angleToCenter) * distance;
+    
+    // 确保不超出安全区域
+    x = Math.max(-safeZone, Math.min(safeZone, x));
+    z = Math.max(-safeZone, Math.min(safeZone, z));
+    
+    // 检查是否太靠近圣诞树，如果是则稍微偏移
+    const distToCenter = Math.sqrt(x * x + z * z);
+    if (distToCenter < CHRISTMAS_TREE_RADIUS) {
+      const offsetAngle = angleToCenter + (Math.random() - 0.5) * Math.PI / 2;
+      x = currentPos.x + Math.cos(offsetAngle) * distance;
+      z = currentPos.z + Math.sin(offsetAngle) * distance;
+      x = Math.max(-safeZone, Math.min(safeZone, x));
+      z = Math.max(-safeZone, Math.min(safeZone, z));
+    }
+    
+    y = terrainHeight(x, z);
+    return { x, y, z };
+  }
+  
+  // 正常情况：在当前位置附近随机移动，但确保目标在安全区域内
   do {
-    // 在当前位置附近随机移动
     const angle = Math.random() * Math.PI * 2;
     const distance = 10 + Math.random() * 20;
     x = currentPos.x + Math.cos(angle) * distance;
     z = currentPos.z + Math.sin(angle) * distance;
     
-    // 限制在地图范围内
-    const half = CONFIG.MAP_HALF;
-    x = Math.max(-half, Math.min(half, x));
-    z = Math.max(-half, Math.min(half, z));
+    // 限制在安全区域内
+    x = Math.max(-safeZone, Math.min(safeZone, x));
+    z = Math.max(-safeZone, Math.min(safeZone, z));
     
     attempts++;
     
