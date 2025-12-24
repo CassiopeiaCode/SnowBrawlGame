@@ -67,7 +67,14 @@ async function obfuscateJS(jsCode: string): Promise<string> {
     }
 
     console.log("[build_prod] JS 加密成功");
-    return result.content;
+    
+    // 将加密后的 JS 进行 base64 编码并包装为 eval 执行
+    const obfuscatedCode = result.content;
+    const base64Code = btoa(unescape(encodeURIComponent(obfuscatedCode)));
+    const wrappedCode = `eval(decodeURIComponent(escape(atob('${base64Code}'))))`;
+    
+    console.log("[build_prod] JS base64 包装完成");
+    return wrappedCode;
   } catch (error) {
     console.error("[build_prod] JS 加密失败:", error);
     console.log("[build_prod] 使用未加密版本");
