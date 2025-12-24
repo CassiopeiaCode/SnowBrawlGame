@@ -125,6 +125,63 @@
       networkManager.connect(playerName);
     }
 
+    // 背景音乐
+    let bgMusic = null;
+    let audioContext = null;
+    let gainNode = null;
+
+    function initBackgroundMusic() {
+      bgMusic = new Audio('/assets/bossa-nova-441725.mp3');
+      bgMusic.loop = true;
+      bgMusic.volume = 0.5;
+      
+      // 创建 Web Audio API 上下文用于更精细的音量控制
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioContext.createMediaElementSource(bgMusic);
+      gainNode = audioContext.createGain();
+      source.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      // 用户交互后才能播放音频（浏览器限制）
+      const playMusic = () => {
+        if (audioContext.state === 'suspended') {
+          audioContext.resume();
+        }
+        bgMusic.play().catch(e => console.warn('音乐播放失败:', e));
+        document.removeEventListener('click', playMusic);
+        document.removeEventListener('keydown', playMusic);
+      };
+      
+      document.addEventListener('click', playMusic);
+      document.addEventListener('keydown', playMusic);
+    }
+
+    function updateMusicVolume() {
+      if (!localPlayer || !gainNode) return;
+      
+      // 计算玩家与圣诞树中心的距离
+      const playerPos = localPlayer.mesh.position;
+      const treePos = new THREE.Vector3(0, 0, 0); // 圣诞树在地图中心
+      const distance = playerPos.distanceTo(treePos);
+      
+      // 距离越近音量越大
+      // 最大距离设为 50，超过这个距离音量为 0
+      const maxDistance = 50;
+      const minDistance = 5; // 最近距离，此时音量最大
+      
+      let volume = 0;
+      if (distance <= minDistance) {
+        volume = 1.0; // 最大音量
+      } else if (distance >= maxDistance) {
+        volume = 0.1; // 最小音量（不完全静音）
+      } else {
+        // 线性插值
+        volume = 1.0 - ((distance - minDistance) / (maxDistance - minDistance)) * 0.9;
+      }
+      
+      gainNode.gain.value = volume;
+    }
+
     function init() {
       scene = new THREE.Scene(); scene.background = new THREE.Color(0xD6EAF8); scene.fog = new THREE.Fog(0xD6EAF8, 15, 70);
       
@@ -137,6 +194,9 @@
       clock = new THREE.Clock();
       
 	      networkManager = new NetworkManager();
+
+      // 初始化背景音乐
+      initBackgroundMusic();
 
       // 检查登录状态
       checkAuthStatus();
@@ -260,6 +320,9 @@
               snowballs[i].update(dt); if (!snowballs[i].active) snowballs.splice(i, 1);
           }
           if (networkManager) networkManager.maybeSendLocalState();
+
+          // 更新背景音乐音量
+          updateMusicVolume();
 
           if (localPlayer) {
               const eyeOffset = localPlayer.input.shift ? 1.35 : 1.5;
