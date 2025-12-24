@@ -32,27 +32,13 @@ async function aesEncrypt(plaintext) {
   const combined = new Uint8Array(iv.length + ciphertext.byteLength);
   combined.set(iv, 0);
   combined.set(new Uint8Array(ciphertext), iv.length);
-  
-  // 修复：使用正确的 base64 编码，避免 Latin1 问题
-  let binary = '';
-  const len = combined.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(combined[i]);
-  }
-  return btoa(binary);
+  return btoa(String.fromCharCode(...combined));
 }
 
 async function aesDecrypt(encrypted) {
   try {
     const key = await getAesKey();
-    // 修复：正确解码 base64
-    const binaryString = atob(encrypted);
-    const len = binaryString.length;
-    const combined = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      combined[i] = binaryString.charCodeAt(i);
-    }
-    
+    const combined = Uint8Array.from(atob(encrypted), c => c.charCodeAt(0));
     const iv = combined.slice(0, 12);
     const ciphertext = combined.slice(12);
     const decrypted = await crypto.subtle.decrypt(
@@ -60,8 +46,7 @@ async function aesDecrypt(encrypted) {
       key,
       ciphertext
     );
-    // 使用 TextDecoder 正确解码 UTF-8
-    return new TextDecoder('utf-8').decode(decrypted);
+    return new TextDecoder().decode(decrypted);
   } catch (e) {
     console.error("[Client] AES decrypt failed:", e, "raw:", encrypted.slice(0, 100));
     return null;
