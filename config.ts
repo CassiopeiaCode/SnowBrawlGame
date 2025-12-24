@@ -9,7 +9,7 @@ export const CONFIG = {
   MAX_CHAT: 80,
   CLEANUP_IDLE_MS: 60_000,
   CLEANUP_SCAN_MS: 10_000,
-  MAP_HALF: 95, // 地图半径（玩家活动区域）与前端保持一致
+  MAP_HALF: 190, // 地图半径（玩家活动区域）与前端保持一致 - 扩大4倍面积
   ALLOW_DUPLICATE_NAMES: true, // 是否允许同名玩家多重登录
 
   GAME: {

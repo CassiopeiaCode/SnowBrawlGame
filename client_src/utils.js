@@ -185,7 +185,7 @@ const CONFIG = {
   remoteLerp: 12,
   lookSensitivity: 0.002,
   minPitch: -1.5, maxPitch: 1.5,
-  mapHalf: 95,
+  mapHalf: 190, // 扩大4倍面积
 };
 
 let scene, camera, renderer, clock;

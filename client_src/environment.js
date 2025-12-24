@@ -391,7 +391,7 @@ function createChristmasTree() {
 
 function createEnvironment() {
   const rng = makeRng(worldSeed);
-  const groundSize = 200;
+  const groundSize = 400; // 扩大地图尺寸
   const canvas = document.createElement('canvas');
   canvas.width = 64;
   canvas.height = 64;
@@ -432,19 +432,19 @@ function createEnvironment() {
   dirLight.castShadow = true;
   dirLight.shadow.mapSize.width = 2048;
   dirLight.shadow.mapSize.height = 2048;
-  dirLight.shadow.camera.left = -50;
-  dirLight.shadow.camera.right = 50;
-  dirLight.shadow.camera.top = 50;
-  dirLight.shadow.camera.bottom = -50;
+  dirLight.shadow.camera.left = -100;
+  dirLight.shadow.camera.right = 100;
+  dirLight.shadow.camera.top = 100;
+  dirLight.shadow.camera.bottom = -100;
   scene.add(dirLight);
 
-  const snowCount = 2000;
+  const snowCount = 4000; // 增加雪花数量以覆盖更大地图
   const snowGeo = new THREE.BufferGeometry();
   const posArr = new Float32Array(snowCount * 3);
   for (let i = 0; i < snowCount * 3; i += 3) {
-    posArr[i] = (rng() - 0.5) * 120;
+    posArr[i] = (rng() - 0.5) * 240; // 扩大雪花范围
     posArr[i + 1] = rng() * 50;
-    posArr[i + 2] = (rng() - 0.5) * 120;
+    posArr[i + 2] = (rng() - 0.5) * 240; // 扩大雪花范围
   }
   snowGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
   const snowMat = new THREE.PointsMaterial({ color: 0xFFFFFF, size: 0.3, transparent: true, opacity: 0.8 });
@@ -466,7 +466,7 @@ function createEnvironment() {
     const maxSlopeDelta = 0.3;
     const allNames = KENNEY_OUTDOOR_GLBS.length ? KENNEY_OUTDOOR_GLBS : KENNEY_GLBS;
     const names = allNames.filter((_, idx) => idx % 5 === 0);
-    const instancesPerModel = 1;
+    const instancesPerModel = 2; // 每个模型出现两遍
     for (const name of names) {
       for (let n = 0; n < instancesPerModel; n++) {
         let x = 0, z = 0, y = 0;
