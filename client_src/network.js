@@ -259,7 +259,7 @@ class NetworkManager {
       case "chat":
         {
           const p = playersById.get(ev.playerId);
-          const name = p ? p.name : ev.name;
+          const name = p ? p.name : fixUTF8(ev.name || "Unknown");
           if (p) p.showChat(ev.text);
           appendChatLog(name + ": " + ev.text);
         }
@@ -317,9 +317,9 @@ class NetworkManager {
             if (victim.id === localPlayerId) setDeadUI(true);
             // 远程玩家死亡：不再隐藏 mesh，让他们以倒地姿态留在场景中
           }
-          // 显示击杀信息到聊天
-          const attackerName = ev.attackerName || "???";
-          const victimName = ev.victimName || "???";
+          // 显示击杀信息到聊天（修复 UTF-8 编码）
+          const attackerName = fixUTF8(ev.attackerName || "???");
+          const victimName = fixUTF8(ev.victimName || "???");
           appendChatLog("💀 " + attackerName + " 击杀了 " + victimName);
         }
         break;

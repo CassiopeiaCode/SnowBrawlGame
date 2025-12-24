@@ -244,3 +244,30 @@ async function wsDecode(str) {
     return null;
   }
 }
+
+// 修复 UTF-8 编码问题：将错误编码的字符串转换为正确的 UTF-8
+function fixUTF8(str) {
+  if (!str) return str;
+  
+  try {
+    // 检测是否包含疑似乱码的字符（Latin-1 范围内的特殊字符）
+    // 如果字符串看起来正常（只包含 ASCII、emoji 等），就不处理
+    const hasWeirdChars = /[\xC0-\xFF]/.test(str);
+    if (!hasWeirdChars) {
+      return str; // 字符串看起来正常，不处理
+    }
+    
+    // 尝试修复：将字符串按 Latin-1 编码转为字节，再用 UTF-8 解码
+    const bytes = new Uint8Array(str.split('').map(c => c.charCodeAt(0) & 0xFF));
+    const fixed = new TextDecoder('utf-8').decode(bytes);
+    
+    // 验证修复后的字符串是否合理（不包含替换字符 �）
+    if (fixed.includes('�')) {
+      return str; // 修复失败，返回原字符串
+    }
+    
+    return fixed;
+  } catch (e) {
+    return str;
+  }
+}

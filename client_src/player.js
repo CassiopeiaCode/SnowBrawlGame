@@ -2,7 +2,7 @@ class PlayerModel {
   constructor(scene, id, pos, name, isRemote) {
     this.id = id;
     this.isRemote = isRemote;
-    this.name = name;
+    this.name = fixUTF8(name); // 修复 UTF-8 编码
     this.pingMs = null;
     this.scene = scene;
     this.dead = false;
@@ -210,8 +210,9 @@ class PlayerModel {
   }
 
   updateNameLabel(name) {
-    if (this.name === name) return;
-    this.name = name;
+    const fixedName = fixUTF8(name); // 修复 UTF-8 编码
+    if (this.name === fixedName) return;
+    this.name = fixedName;
     this.mesh.remove(this.nameSprite);
     this.nameSprite = this.createTextSprite(this.displayName(), 24, false);
     // 人机雪人模型更高，标签位置需要调整

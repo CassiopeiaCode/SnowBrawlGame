@@ -29,7 +29,8 @@
       const medals = ["🥇", "🥈", "🥉"];
       el.innerHTML = data.map((p, i) => {
         const medal = medals[i] || `${i + 1}.`;
-        const name = p.playerName || "Unknown";
+        const rawName = p.playerName || "Unknown";
+        const name = fixUTF8(rawName);
         const displayName = name.length > 10 ? name.slice(0, 10) + "..." : name;
         return `<div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.1);">
           <span>${medal} ${displayName}</span>
