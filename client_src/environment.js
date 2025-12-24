@@ -133,8 +133,6 @@ const KENNEY_OUTDOOR_GLBS = [
   "snowflake-a.glb",
   "snowflake-b.glb",
   "snowflake-c.glb",
-  "snowman-hat.glb",
-  "snowman.glb",
   "train-locomotive.glb",
   "train-tender.glb",
   "train-wagon-flat-short.glb",
@@ -241,7 +239,8 @@ function createChristmasTree() {
     new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.1, metalness: 0.4 }),
     new THREE.MeshStandardMaterial({ color: 0xffd700, roughness: 0.1, metalness: 0.8 }),
     new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.1, metalness: 0.5 }),
-    new THREE.MeshStandardMaterial({ color: 0x2266ff, roughness: 0.1, metalness: 0.5 })
+    new THREE.MeshStandardMaterial({ color: 0x2266ff, roughness: 0.1, metalness: 0.5 }),
+    new THREE.MeshStandardMaterial({ color: 0xff00ff, roughness: 0.1, metalness: 0.4 })
   ];
   
   // 1. 树干（加大尺寸）
@@ -253,7 +252,7 @@ function createChristmasTree() {
   trunk.receiveShadow = true;
   treeGroup.add(trunk);
   
-  // 2. 树叶层级（加大尺寸）
+  // 2. 树叶层级（加大尺寸，增加更多层级）
   const layers = [
     { y: 5.5 * treeScale, r: 6.0 * treeScale, h: 5.0 * treeScale },
     { y: 8.0 * treeScale, r: 5.2 * treeScale, h: 4.5 * treeScale },
@@ -266,20 +265,21 @@ function createChristmasTree() {
   const christmasLights = []; // 存储彩灯用于动画
   
   layers.forEach((layer, tierIndex) => {
-    // 创建圆锥形树叶
-    const geometry = new THREE.ConeGeometry(layer.r, layer.h, 16, 2);
+    // 创建圆锥形树叶（增加分段数以便更好的扭曲，关闭底部）
+    const geometry = new THREE.ConeGeometry(layer.r, layer.h, 32, 4, false);
     const positions = geometry.attributes.position;
     
-    // 轻微扭曲让树更自然
+    // 更强的扭曲让树更自然（参考原版）
     for (let i = 0; i < positions.count; i++) {
       const x = positions.getX(i);
       const yPos = positions.getY(i);
       const z = positions.getZ(i);
       
+      const distortion = 0.4;
       if (yPos < layer.h / 2 - 0.1) {
-        positions.setX(i, x + (rng() - 0.5) * 0.3);
-        positions.setY(i, yPos + (rng() - 0.5) * 0.2);
-        positions.setZ(i, z + (rng() - 0.5) * 0.3);
+        positions.setX(i, x + (rng() - 0.5) * distortion);
+        positions.setY(i, yPos + (rng() - 0.5) * distortion);
+        positions.setZ(i, z + (rng() - 0.5) * distortion);
       }
     }
     geometry.computeVertexNormals();
@@ -290,30 +290,34 @@ function createChristmasTree() {
     mesh.receiveShadow = true;
     treeGroup.add(mesh);
     
-    // 添加装饰（优化数量）
-    const decorCount = Math.floor(layer.r * 4);
+    // 添加装饰（增加数量，参考原版）
+    const decorCount = Math.floor(layer.r * 7);
     for (let i = 0; i < decorCount; i++) {
       const angle = (i / decorCount) * Math.PI * 2 + (tierIndex * 1.5);
-      const ratio = 0.3 + rng() * 0.5;
-      const currentRadius = layer.r * ratio * 0.85;
+      const ratio = 0.1 + rng() * 0.8; // 更大的分布范围
+      const currentRadius = layer.r * ratio * 0.9;
       const actualY = layer.y - (layer.h / 2) + (layer.h * (1 - ratio));
       
       const x = Math.cos(angle) * currentRadius;
       const z = Math.sin(angle) * currentRadius;
       
-      if (rng() > 0.5) {
+      const offset = 0.2;
+      const finalX = x * (1 + offset / currentRadius);
+      const finalZ = z * (1 + offset / currentRadius);
+      
+      if (rng() > 0.4) {
         // 装饰球（按比例放大）
         const size = (0.25 + rng() * 0.15) * treeScale;
         const mat = ornamentMaterials[Math.floor(rng() * ornamentMaterials.length)];
-        const ball = new THREE.Mesh(new THREE.SphereGeometry(size, 8, 8), mat);
-        ball.position.set(x, actualY - 0.2 * treeScale, z);
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(size, 16, 16), mat);
+        ball.position.set(finalX, actualY - 0.2 * treeScale, finalZ);
         ball.castShadow = true;
         treeGroup.add(ball);
       } else {
         // 彩灯（按比例放大）
         const hue = rng();
         const colorVal = new THREE.Color().setHSL(hue, 1, 0.5);
-        const bulbGeo = new THREE.SphereGeometry(0.12 * treeScale, 6, 6);
+        const bulbGeo = new THREE.SphereGeometry(0.12 * treeScale, 8, 8);
         const bulbMat = new THREE.MeshStandardMaterial({
           color: colorVal,
           emissive: colorVal,
@@ -321,7 +325,7 @@ function createChristmasTree() {
           roughness: 0.1
         });
         const bulb = new THREE.Mesh(bulbGeo, bulbMat);
-        bulb.position.set(x, actualY, z);
+        bulb.position.set(finalX, actualY, finalZ);
         treeGroup.add(bulb);
         
         christmasLights.push({
@@ -334,7 +338,7 @@ function createChristmasTree() {
     }
   });
   
-  // 3. 星星（加大尺寸）
+  // 3. 星星（加大尺寸，添加光晕效果）
   const starGroup = new THREE.Group();
   starGroup.position.set(0, 18.2 * treeScale, 0);
   
@@ -342,7 +346,7 @@ function createChristmasTree() {
   const starShape = new THREE.Shape();
   const pts = 5;
   for (let i = 0; i < pts * 2; i++) {
-    const r = (i % 2 === 0) ? 1.0 * treeScale : 0.4 * treeScale;
+    const r = (i % 2 === 0) ? 1.2 * treeScale : 0.5 * treeScale;
     const a = (i / (pts * 2)) * Math.PI * 2;
     if (i === 0) starShape.moveTo(Math.cos(a) * r, Math.sin(a) * r);
     else starShape.lineTo(Math.cos(a) * r, Math.sin(a) * r);
@@ -350,17 +354,17 @@ function createChristmasTree() {
   starShape.closePath();
   
   const starGeo = new THREE.ExtrudeGeometry(starShape, {
-    depth: 0.2 * treeScale,
+    depth: 0.3 * treeScale,
     bevelEnabled: true,
-    bevelThickness: 0.05 * treeScale,
-    bevelSize: 0.05 * treeScale,
+    bevelThickness: 0.1 * treeScale,
+    bevelSize: 0.1 * treeScale,
     bevelSegments: 1
   });
   
   const starMat = new THREE.MeshStandardMaterial({
     color: 0xffd700,
     emissive: 0xffaa00,
-    emissiveIntensity: 0.8,
+    emissiveIntensity: 0.6,
     metalness: 0.8,
     roughness: 0.2
   });
@@ -368,8 +372,33 @@ function createChristmasTree() {
   const starMesh = new THREE.Mesh(starGeo, starMat);
   starGroup.add(starMesh);
   
+  // 创建星星光晕 Sprite
+  function createStarTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255, 255, 200, 1)');
+    grad.addColorStop(0.4, 'rgba(255, 200, 50, 0.3)');
+    grad.addColorStop(1, 'rgba(255, 200, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(canvas);
+  }
+  
+  const glowMat = new THREE.SpriteMaterial({
+    map: createStarTexture(),
+    color: 0xffdd44,
+    transparent: true,
+    blending: THREE.AdditiveBlending
+  });
+  const glowSprite = new THREE.Sprite(glowMat);
+  glowSprite.scale.set(6 * treeScale, 6 * treeScale, 1);
+  starGroup.add(glowSprite);
+  
   // 星星光源（加大范围）
-  const starLight = new THREE.PointLight(0xffaa00, 1.5, 18 * treeScale);
+  const starLight = new THREE.PointLight(0xffaa00, 1.2, 15 * treeScale);
   starGroup.add(starLight);
   
   treeGroup.add(starGroup);
@@ -387,7 +416,7 @@ function createChristmasTree() {
   STATIC_OBSTACLES.push(treeCollisionBox);
   
   // 返回动画数据
-  return { treeGroup, starGroup, starMesh, christmasLights };
+  return { treeGroup, starGroup, starMesh, christmasLights, glowSprite };
 }
 
 function createEnvironment() {

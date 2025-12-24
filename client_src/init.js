@@ -304,6 +304,7 @@
               // 树木微动（模拟风）
               if (tree.treeGroup) {
                   tree.treeGroup.rotation.y = Math.sin(time * 0.2) * 0.05;
+                  tree.treeGroup.rotation.z = Math.sin(time * 0.5) * 0.005; // 轻微摇摆
               }
               
               // 星星旋转和呼吸
@@ -312,12 +313,17 @@
                   tree.starMesh.rotation.z = Math.sin(time) * 0.1;
               }
               
+              // 星星光晕呼吸效果
+              if (tree.glowSprite) {
+                  tree.glowSprite.material.opacity = 0.5 + Math.sin(time * 3) * 0.2;
+              }
+              
               // 彩灯闪烁
               if (tree.christmasLights) {
                   tree.christmasLights.forEach(light => {
                       const intensity = 0.5 + Math.sin(time * light.speed * 4 + light.phase) * 0.5;
                       light.mesh.material.emissiveIntensity = intensity * 2;
-                      const scale = 1 + intensity * 0.15;
+                      const scale = 1 + intensity * 0.2; // 增加灯泡大小变化
                       light.mesh.scale.setScalar(scale);
                   });
               }
