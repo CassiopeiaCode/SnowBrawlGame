@@ -41,45 +41,61 @@ async function getLatestMtime(dir: string): Promise<number> {
 }
 
 async function obfuscateJS(jsCode: string): Promise<string> {
-  console.log("[build_prod] 调用 jshaman API 加密 JS...");
+  const MAX_RETRIES = 5; // 最大重试次数
+  const RETRY_DELAY = 2000; // 重试延迟（毫秒）
   
-  try {
-    const response = await fetch(JSHAMAN_API, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        js_code: jsCode,
-        vip_code: "free",
-        // 免费版不传 config 参数
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const result = await response.json();
-
-    if (result.status !== 0) {
-      throw new Error(`jshaman API error: ${result.message}`);
-    }
-
-    console.log("[build_prod] JS 加密成功");
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    console.log(`[build_prod] 调用 jshaman API 加密 JS... (尝试 ${attempt}/${MAX_RETRIES})`);
     
-    // 将加密后的 JS 进行 base64 编码并包装为 eval 执行
-    const obfuscatedCode = result.content;
-    const base64Code = btoa(unescape(encodeURIComponent(obfuscatedCode)));
-    const wrappedCode = `eval(decodeURIComponent(escape(atob('${base64Code}'))))`;
-    
-    console.log("[build_prod] JS base64 包装完成");
-    return wrappedCode;
-  } catch (error) {
-    console.error("[build_prod] JS 加密失败:", error);
-    console.log("[build_prod] 使用未加密版本");
-    return jsCode;
+    try {
+      const response = await fetch(JSHAMAN_API, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          js_code: jsCode,
+          vip_code: "free",
+          // 免费版不传 config 参数
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (result.status !== 0) {
+        throw new Error(`jshaman API error: ${result.message}`);
+      }
+
+      console.log("[build_prod] JS 加密成功");
+      
+      // 将加密后的 JS 进行 base64 编码并包装为 eval 执行
+      const obfuscatedCode = result.content;
+      const base64Code = btoa(unescape(encodeURIComponent(obfuscatedCode)));
+      const wrappedCode = `eval(decodeURIComponent(escape(atob('${base64Code}'))))`;
+      
+      console.log("[build_prod] JS base64 包装完成");
+      return wrappedCode;
+      
+    } catch (error) {
+      console.error(`[build_prod] 第 ${attempt} 次加密失败:`, error);
+      
+      if (attempt < MAX_RETRIES) {
+        console.log(`[build_prod] ${RETRY_DELAY / 1000} 秒后重试...`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      } else {
+        // 达到最大重试次数，抛出错误
+        console.error("[build_prod] 已达到最大重试次数，加密失败");
+        throw new Error(`JS 加密失败，已重试 ${MAX_RETRIES} 次: ${error}`);
+      }
+    }
   }
+  
+  // 理论上不会到这里，但为了类型安全
+  throw new Error("JS 加密失败");
 }
 
 async function buildProdHtml(): Promise<string> {
@@ -160,13 +176,19 @@ async function shouldRebuild(): Promise<boolean> {
 // 主函数
 async function main() {
   const forceRebuild = Deno.args.includes("--force");
-  if (forceRebuild || await shouldRebuild()) {
-    console.log("[build_prod] 开始构建...");
-    const html = await buildProdHtml();
-    await Deno.writeTextFile(PROD_HTML_PATH, html);
-    console.log(`[build_prod] 生产版本已写入 ${PROD_HTML_PATH}`);
-  } else {
-    console.log("[build_prod] 无需重新构建");
+  
+  try {
+    if (forceRebuild || await shouldRebuild()) {
+      console.log("[build_prod] 开始构建...");
+      const html = await buildProdHtml();
+      await Deno.writeTextFile(PROD_HTML_PATH, html);
+      console.log(`[build_prod] 生产版本已写入 ${PROD_HTML_PATH}`);
+    } else {
+      console.log("[build_prod] 无需重新构建");
+    }
+  } catch (error) {
+    console.error("[build_prod] 构建失败:", error);
+    Deno.exit(1); // 以错误码退出
   }
 }
 

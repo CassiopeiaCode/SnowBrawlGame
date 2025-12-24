@@ -164,22 +164,23 @@
       const treePos = new THREE.Vector3(0, 0, 0); // 圣诞树在地图中心
       const distance = playerPos.distanceTo(treePos);
       
-      // 距离越近音量越大
-      // 最大距离设为 50，超过这个距离音量为 0
-      const maxDistance = 50;
-      const minDistance = 5; // 最近距离，此时音量最大
+      // 距离越近音量越大，扩大距离范围并减缓衰减
+      const maxDistance = 180; // 最大距离扩大3倍（60 * 3）
+      const minDistance = 10; // 最近距离
       
-      let volume = 0;
-      if (distance <= minDistance) {
+      let volume = 0; 
+      if (distance <= minDistance) { 
         volume = 1.0; // 最大音量
       } else if (distance >= maxDistance) {
-        volume = 0.1; // 最小音量（不完全静音）
+        volume = 0.05; // 最小音量
       } else {
-        // 线性插值
-        volume = 1.0 - ((distance - minDistance) / (maxDistance - minDistance)) * 0.9;
+        // 使用较缓和的衰减曲线
+        const ratio = (distance - minDistance) / (maxDistance - minDistance);
+        volume = Math.pow(1 - ratio, 1.5); // 指数降低到1.5，衰减更缓和
+        volume = Math.max(0.05, volume); // 确保最小音量
       }
       
-      gainNode.gain.value = volume;
+      gainNode.gain.value = volume; 
     }
 
     function init() {
