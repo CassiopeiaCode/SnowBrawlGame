@@ -33,7 +33,7 @@
         const name = fixUTF8(rawName);
         const displayName = name.length > 10 ? name.slice(0, 10) + "..." : name;
         return `<div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.1);">
-          <span>${medal} ${displayName}</span>
+          <span><span>${medal}</span> <span>${displayName}</span></span>
           <span style="color:#4CAF50; font-weight:bold;">${p.kills}</span>
         </div>`;
       }).join("");

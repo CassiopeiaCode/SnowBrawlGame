@@ -74,8 +74,20 @@ async function obfuscateJS(jsCode: string): Promise<string> {
       
       // 将加密后的 JS 进行 base64 编码并包装为 eval 执行
       const obfuscatedCode = result.content;
-      const base64Code = btoa(unescape(encodeURIComponent(obfuscatedCode)));
-      const wrappedCode = `eval(decodeURIComponent(escape(atob('${base64Code}'))))`;
+      
+      // 使用 TextEncoder 正确处理 UTF-8 编码
+      const encoder = new TextEncoder();
+      const bytes = encoder.encode(obfuscatedCode);
+      
+      // 将字节数组转换为 base64
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64Code = btoa(binary);
+      
+      // 解码时使用 TextDecoder
+      const wrappedCode = `eval(new TextDecoder().decode(Uint8Array.from(atob('${base64Code}'), c => c.charCodeAt(0))))`;
       
       console.log("[build_prod] JS base64 包装完成");
       return wrappedCode;
