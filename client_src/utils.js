@@ -251,8 +251,17 @@ function fixUTF8(str) {
   
   try {
     // 检测是否包含疑似乱码的字符（Latin-1 范围内的特殊字符）
-    // 如果字符串看起来正常（只包含 ASCII、emoji 等），就不处理
-    const hasWeirdChars = /[\xC0-\xFF]/.test(str);
+    // 排除高位 Unicode 字符（如 emoji）
+    let hasWeirdChars = false;
+    for (let i = 0; i < str.length; i++) {
+      const code = str.charCodeAt(i);
+      // 检测 Latin-1 扩展字符（0xC0-0xFF），但排除高位代理对（0xD800-0xDFFF）
+      if (code >= 0xC0 && code <= 0xFF) {
+        hasWeirdChars = true;
+        break;
+      }
+    }
+    
     if (!hasWeirdChars) {
       return str; // 字符串看起来正常，不处理
     }
