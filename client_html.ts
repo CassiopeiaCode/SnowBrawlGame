@@ -2,21 +2,13 @@
 // client_src/  - 开发版源文件（拆分成多个小文件，方便修改）
 // client.prod.html - 生产版（你加密后的版本，用于防作弊）
 // 
-// 逻辑：如果 client_src/ 中任何文件比 client.prod.html 新，则构建并使用 dev 版
+// 逻辑：如果 client_src/ 中任何文件比 client.prod.html 新，则自动构建加密版本并使用 dev 版
 //       否则使用 prod 版
+
+import { shouldRebuild, buildProdHtml } from "./build_prod.ts";
 
 const CLIENT_SRC_DIR = "./client_src";
 const PROD_HTML_PATH = "./client.prod.html";
-
-// JS 文件加载顺序（有依赖关系）
-const JS_FILES = [
-  "utils.js",
-  "network.js",
-  "player.js",
-  "snowball.js",
-  "environment.js",
-  "init.js",
-];
 
 let CLIENT_HTML = "";
 let CLIENT_HTML_SOURCE = "";
@@ -33,42 +25,19 @@ async function getLatestMtime(dir: string): Promise<number> {
   return latest;
 }
 
-async function buildDevHtml(): Promise<string> {
-  // 读取各部分
-  const style = await Deno.readTextFile(`${CLIENT_SRC_DIR}/style.css`);
-  const body = await Deno.readTextFile(`${CLIENT_SRC_DIR}/body.html`);
-  
-  // 按顺序读取并合并 JS 文件
-  const jsContents: string[] = [];
-  for (const file of JS_FILES) {
-    const content = await Deno.readTextFile(`${CLIENT_SRC_DIR}/${file}`);
-    jsContents.push(`// === ${file} ===\n${content}`);
-  }
-  const script = jsContents.join("\n\n");
-
-  // 组装完整 HTML
-  return `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>圣诞雪球大乱斗</title>
-  <style>
-${style}
-  </style>
-</head>
-<body>
-${body}
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-  <script>
-${script}
-  </script>
-</body>
-</html>`;
-}
-
 async function loadClientHtml(): Promise<string> {
+  // 首先检查是否需要重新构建 prod 版本
+  if (await shouldRebuild()) {
+    console.log("[client_html] 检测到 dev 更新，自动构建加密版本...");
+    try {
+      const prodHtml = await buildProdHtml();
+      await Deno.writeTextFile(PROD_HTML_PATH, prodHtml);
+      console.log("[client_html] 加密版本已写入 client.prod.html");
+    } catch (error) {
+      console.error("[client_html] 构建加密版本失败:", error);
+    }
+  }
+
   let prodMtime = 0;
   let prodExists = false;
 
@@ -102,23 +71,27 @@ async function loadClientHtml(): Promise<string> {
     return await Deno.readTextFile(PROD_HTML_PATH);
   }
 
-  // 只有 dev 存在
-  if (devExists && !prodExists) {
+  // 只有 dev 存在或 dev 更新
+  if (devExists) {
     CLIENT_HTML_SOURCE = "dev";
-    console.log(`[client_html] Building from client_src/ (no prod file)`);
-    return await buildDevHtml();
-  }
-
-  // 两个都存在，比较时间戳
-  if (devMtime > prodMtime) {
-    CLIENT_HTML_SOURCE = "dev";
-    console.log(`[client_html] Building from client_src/ (dev newer: ${new Date(devMtime).toISOString()} > ${new Date(prodMtime).toISOString()})`);
-    return await buildDevHtml();
-  } else {
-    CLIENT_HTML_SOURCE = "prod";
-    console.log(`[client_html] Using client.prod.html (prod newer: ${new Date(prodMtime).toISOString()})`);
+    if (!prodExists) {
+      console.log(`[client_html] Using dev (no prod file)`);
+    } else if (devMtime > prodMtime) {
+      console.log(`[client_html] Using dev (dev newer: ${new Date(devMtime).toISOString()} > ${new Date(prodMtime).toISOString()})`);
+    } else {
+      // dev 存在但不比 prod 新，使用 prod
+      CLIENT_HTML_SOURCE = "prod";
+      console.log(`[client_html] Using client.prod.html (prod newer: ${new Date(prodMtime).toISOString()})`);
+      return await Deno.readTextFile(PROD_HTML_PATH);
+    }
+    
+    // 使用 dev 版本（从 prod 读取，因为已经自动构建过了）
     return await Deno.readTextFile(PROD_HTML_PATH);
   }
+
+  // 默认使用 prod
+  CLIENT_HTML_SOURCE = "prod";
+  return await Deno.readTextFile(PROD_HTML_PATH);
 }
 
 // 启动时加载

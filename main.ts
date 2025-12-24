@@ -4,7 +4,7 @@
 // GET  /health -> health
 // GET  /auth/* -> OAuth 认证
 
-import { CONFIG, PORT, WS_AES_KEY_HEX } from "./config.ts";
+import { CONFIG, PORT } from "./config.ts";
 import { CLIENT_HTML, CLIENT_HTML_SOURCE } from "./client_html.ts";
 import { json, text } from "./utils.ts";
 import { clients, events, lastSeenSeq, playersCache } from "./state.ts";
@@ -121,9 +121,8 @@ Deno.serve({ port: PORT }, async (req) => {
   }
 
   if (url.pathname === "/") {
-    // 在 HTML 模板中注入 AES 密钥
-    const html = CLIENT_HTML.replace(/__WS_AES_KEY__/g, WS_AES_KEY_HEX);
-    return new Response(html, {
+    // 直接返回已构建好的 HTML（密钥已在构建时注入）
+    return new Response(CLIENT_HTML, {
       headers: {
         "content-type": "text/html; charset=utf-8",
         "access-control-allow-origin": CONFIG.CORS,
