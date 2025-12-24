@@ -10,7 +10,7 @@ class NetworkManager {
     this.pingTimerId = null;
     this.playerName = null;
     this.connectAttempts = 0;
-    this.maxConnectAttempts = 5;
+    this.maxConnectAttempts = 3;
     this.baseReconnectDelayMs = 1000;
   }
   // sendRename 已禁用 - 用户名由 OAuth 决定，不可修改
@@ -28,30 +28,24 @@ class NetworkManager {
   }
   scheduleReconnect() {
     if (this.connectAttempts >= this.maxConnectAttempts) {
-      this.status("🔴 多次重连失败，正在刷新页面...", "#FF5555");
+      this.status("🔴 重连失败 3 次，1 秒后刷新页面...", "#FF5555");
       setTimeout(() => {
         try {
           location.reload();
         } catch {
           // ignore
         }
-      }, 1500);
+      }, 1000);
       return;
     }
     this.connectAttempts++;
-    const delay = Math.min(
-      this.baseReconnectDelayMs * Math.pow(2, this.connectAttempts - 1),
-      30000,
-    );
-    const secs = Math.round(delay / 100) / 10;
     this.status(
-      "🟡 连接断开，第 " + this.connectAttempts + " 次重连，" + secs +
-        " 秒后重试...",
+      "🟡 连接断开，第 " + this.connectAttempts + " 次重连（1 秒后重试）...",
       "#FFFF55",
     );
     setTimeout(() => {
       this.connect(this.playerName || "Player");
-    }, delay);
+    }, 1000);
   }
   startPingLoop() {
     if (this.pingTimerId) return;

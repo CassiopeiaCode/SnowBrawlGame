@@ -135,5 +135,6 @@ Deno.serve({ port: PORT }, async (req) => {
     });
   }
 
-  return text("Not Found", 404);
+  // 404 重定向到首页（302 临时重定向）
+  return Response.redirect(new URL("/", req.url), 302);
 });
