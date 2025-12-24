@@ -465,7 +465,7 @@ function createEnvironment() {
     const flatSampleOffset = 4;
     const maxSlopeDelta = 0.3;
     const allNames = KENNEY_OUTDOOR_GLBS.length ? KENNEY_OUTDOOR_GLBS : KENNEY_GLBS;
-    const names = allNames.filter((_, idx) => idx % 5 === 0);
+    const names = allNames; // 使用所有元素，不过滤
     const instancesPerModel = 2; // 每个模型出现两遍
     for (const name of names) {
       for (let n = 0; n < instancesPerModel; n++) {
