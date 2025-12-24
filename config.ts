@@ -7,8 +7,8 @@ export const CONFIG = {
   STATE_HZ: 20, // 服务器期望的客户端 state 上报频率（Hz）
   MAX_NAME: 20,
   MAX_CHAT: 80,
-  CLEANUP_IDLE_MS: 60_000,
-  CLEANUP_SCAN_MS: 10_000,
+  CLEANUP_IDLE_MS: 5_000, // 有ping机制后，可以更快清理无响应玩家
+  CLEANUP_SCAN_MS: 5_000, // 更频繁地扫描清理
   MAP_HALF: 190, // 地图半径（玩家活动区域）与前端保持一致 - 扩大4倍面积
   ALLOW_DUPLICATE_NAMES: true, // 是否允许同名玩家多重登录
 

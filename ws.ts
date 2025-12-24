@@ -110,6 +110,11 @@ export async function handleWs(req: Request): Promise<Response> {
 
     switch (msg.t) {
       case "ping":
+        // 更新玩家的最近活跃时间，避免被清理
+        const snap = playersCache.get(client.id);
+        if (snap) {
+          playersCache.set(client.id, { ...snap, updatedAt: Date.now() });
+        }
         wsSend(client.ws, { t: "pong", now: Date.now() });
         return;
 
