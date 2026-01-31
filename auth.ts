@@ -2,11 +2,11 @@
 
 import { CONFIG } from "./config.ts";
 
-// OAuth 配置（从环境变量读取）
-const LINUXDO_CLIENT_ID = Deno.env.get("LINUXDO_CLIENT_ID") || "***REMOVED***";
-const LINUXDO_CLIENT_SECRET = Deno.env.get("LINUXDO_CLIENT_SECRET") || "***REMOVED***";
-const LINUXDO_REDIRECT_URI = Deno.env.get("LINUXDO_REDIRECT_URI") || "http://localhost:8000/auth/callback";
-const JWT_SECRET = Deno.env.get("JWT_SECRET") || "***REMOVED***";
+// OAuth/JWT 配置（必须通过环境变量提供；禁止硬编码默认值）
+const LINUXDO_CLIENT_ID = Deno.env.get("LINUXDO_CLIENT_ID") ?? "";
+const LINUXDO_CLIENT_SECRET = Deno.env.get("LINUXDO_CLIENT_SECRET") ?? "";
+const LINUXDO_REDIRECT_URI = Deno.env.get("LINUXDO_REDIRECT_URI") ?? "http://localhost:8000/auth/callback";
+const JWT_SECRET = Deno.env.get("JWT_SECRET") ?? "";
 
 const AUTHORIZE_URL = "https://connect.linux.do/oauth2/authorize";
 // 国内备用端点（默认使用 linuxdo.org，设置 LINUXDO_USE_CN=false 可切换回 linux.do）
